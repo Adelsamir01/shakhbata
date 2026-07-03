@@ -36,6 +36,8 @@ services:
       - http2
       - --token
       - ${TUNNEL_TOKEN}
+      - --url
+      - http://app:3000
     depends_on:
       app:
         condition: service_healthy
