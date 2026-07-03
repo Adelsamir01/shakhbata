@@ -1265,6 +1265,69 @@ canvas {
   .subtitle {
     line-height: 1.45;
   }
+
+  .game-screen {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .stage {
+    grid-template-rows: 44px 30px 40px minmax(0, 1fr) 46px 118px;
+    gap: 5px;
+  }
+
+  .timer {
+    width: 40px;
+    height: 40px;
+  }
+
+  .word-row {
+    padding: 6px 8px;
+  }
+
+  .tools {
+    padding: 4px;
+  }
+
+  .chat-panel {
+    padding: 6px;
+  }
+}
+
+@media (max-height: 600px) {
+  .stage {
+    grid-template-rows: 42px 28px 38px minmax(0, 1fr) 44px 104px;
+    gap: 4px;
+  }
+
+  .game-header strong,
+  .game-header .small {
+    line-height: 1.25;
+  }
+
+  .score-chip {
+    height: 26px;
+    line-height: 26px;
+    font-size: 11px;
+  }
+
+  .word {
+    min-height: 22px;
+  }
+
+  .letter {
+    height: 20px;
+  }
+
+  .icon-btn,
+  .color-current {
+    width: 36px;
+    height: 36px;
+  }
+
+  .guess-form {
+    grid-template-columns: 1fr 44px;
+  }
 }
 
 @media (min-width: 820px) {
