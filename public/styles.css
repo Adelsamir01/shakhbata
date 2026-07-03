@@ -116,10 +116,35 @@ button {
 .home-hero {
   min-height: 0;
   justify-content: center;
+  align-items: center;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-inline: 16px;
 }
 
 .home-hero .panel {
+  width: min(100%, 500px);
   max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 2dvh, 16px);
+  padding: clamp(14px, 3dvh, 22px);
+}
+
+.home-hero .brand-bar {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.home-hero .pill {
+  flex-shrink: 1;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.35;
+}
+
+.home-hero .error {
+  margin-top: 0;
 }
 
 .rejoin-banner {
@@ -127,7 +152,6 @@ button {
   border: 1px solid var(--brand);
   border-radius: 8px;
   padding: 10px;
-  margin-bottom: 10px;
   text-align: center;
 }
 
@@ -138,7 +162,7 @@ button {
 
 .scribble-scene {
   position: relative;
-  height: clamp(92px, 18dvh, 150px);
+  height: clamp(112px, 21dvh, 164px);
   border: 2px solid var(--ink);
   border-radius: 8px;
   background:
@@ -201,10 +225,11 @@ button {
 }
 
 .title {
-  margin: 10px 0 4px;
+  margin: 2px 0 0;
   font-size: clamp(28px, 8vw, 38px);
   line-height: 1.05;
   font-weight: 900;
+  text-wrap: balance;
 }
 
 .subtitle {
@@ -212,12 +237,13 @@ button {
   color: var(--muted);
   line-height: 1.55;
   font-size: 14px;
+  max-width: 42ch;
 }
 
 .field {
   display: grid;
   gap: 5px;
-  margin-top: 8px;
+  margin-top: 0;
 }
 
 .hidden-field {
@@ -251,7 +277,7 @@ button {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 0;
 }
 
 .btn {
@@ -1177,6 +1203,67 @@ canvas {
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 1ms !important;
+  }
+}
+
+@media (max-width: 430px) {
+  .home-hero {
+    justify-content: flex-start;
+    padding-inline: 12px;
+  }
+
+  .home-hero .panel {
+    gap: 11px;
+    padding: 14px;
+  }
+
+  .home-hero .brand-bar {
+    gap: 8px;
+  }
+
+  .home-hero .logo {
+    font-size: 19px;
+  }
+
+  .home-hero .pill {
+    font-size: 11px;
+    padding: 5px 8px;
+  }
+
+  .scribble-scene {
+    height: clamp(104px, 19dvh, 138px);
+  }
+
+  .subtitle {
+    line-height: 1.5;
+  }
+
+  .input,
+  .btn {
+    min-height: 46px;
+  }
+}
+
+@media (max-height: 680px) {
+  .home-hero {
+    justify-content: flex-start;
+  }
+
+  .home-hero .panel {
+    gap: 9px;
+    padding-block: 12px;
+  }
+
+  .scribble-scene {
+    height: clamp(88px, 18dvh, 120px);
+  }
+
+  .title {
+    font-size: clamp(26px, 7vw, 34px);
+  }
+
+  .subtitle {
+    line-height: 1.45;
   }
 }
 
