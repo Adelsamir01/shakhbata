@@ -1,12 +1,20 @@
 const app = document.querySelector("#app");
+const COLORS = ["#111827", "#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7", "#ec4899", "#78350f", "#6b7280"];
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && state.colorOpen) {
+    state.colorOpen = false;
+    render();
+  }
+});
 const state = {
   name: localStorage.getItem("shakbata:name") || "",
-  code: (new URLSearchParams(location.search).get("room") || new URLSearchParams(location.search).get("code") || "").trim().toUpperCase(),
+  code: (new URLSearchParams(location.search).get("room") || new URLSearchParams(location.search).get("code") || localStorage.getItem("shakbata:roomCode") || "").trim().toUpperCase(),
   playerId: localStorage.getItem("shakbata:playerId") || "",
   room: null,
   source: null,
   tool: "pen",
   color: "#111827",
+  colorOpen: false,
   size: 7,
   strokes: [],
   isDrawing: false,
@@ -76,6 +84,45 @@ function connect(room, playerId) {
   state.source.onerror = () => setError("الاتصال بيحاول يرجع تاني...");
 }
 
+function tryReconnect() {
+  if (!state.code || !state.playerId) return renderHome();
+  const source = new EventSource(`/events?room=${state.code}&player=${state.playerId}`);
+  let gotMessage = false;
+  let failTimer = null;
+
+  source.onmessage = event => {
+    if (gotMessage) return;
+    gotMessage = true;
+    clearTimeout(failTimer);
+    const data = JSON.parse(event.data);
+    if (data.type === "state") {
+      state.source = source;
+      source.onerror = () => setError("الاتصال بيحاول يرجع تاني...");
+      applyRoomState(data.room);
+      syncDrawEvents(data.room.drawEvents, true);
+    }
+  };
+
+  source.onerror = () => {
+    if (gotMessage) {
+      setError("الاتصال بيحاول يرجع تاني...");
+      return;
+    }
+    clearTimeout(failTimer);
+    failTimer = setTimeout(() => {
+      if (!gotMessage && source.readyState !== EventSource.OPEN) {
+        source.close();
+        localStorage.removeItem("shakbata:playerId");
+        localStorage.removeItem("shakbata:roomCode");
+        state.playerId = "";
+        state.code = "";
+        state.room = null;
+        renderHome();
+      }
+    }, 3500);
+  };
+}
+
 function isLocalDrawerDrawing() {
   return state.isDrawing && state.room?.status === "playing" && state.room.drawerId === state.playerId;
 }
@@ -105,6 +152,7 @@ function applyRoomState(room) {
   if (nextRenderKey !== state.renderKey) {
     if (isLocalDrawerDrawing()) {
       state.pendingRenderKey = nextRenderKey;
+      patchLiveUI(room);
       return false;
     }
     state.renderKey = nextRenderKey;
@@ -113,6 +161,50 @@ function applyRoomState(room) {
     return true;
   }
   return false;
+}
+
+function patchLiveUI(room) {
+  const me = room.players.find(player => player.id === state.playerId);
+  const timer = document.querySelector("[data-timer]");
+  if (timer && room.endsAt) {
+    const left = Math.max(0, Math.ceil((room.endsAt - Date.now()) / 1000));
+    timer.textContent = left;
+    timer.classList.toggle("low", left <= 10);
+  }
+  const chat = document.querySelector("[data-chat]");
+  if (chat && room.chat.length) {
+    const currentIds = new Set(Array.from(chat.children).map(child => child.dataset.id).filter(Boolean));
+    const newMessages = room.chat.filter(message => !currentIds.has(message.id));
+    for (const message of newMessages) {
+      const div = document.createElement("div");
+      div.innerHTML = messageHtml(message);
+      chat.appendChild(div.firstElementChild);
+    }
+    if (newMessages.length) chat.scrollTop = chat.scrollHeight;
+  }
+  const scoreList = document.querySelector(".score-list");
+  if (scoreList) {
+    const players = activePlayers(room);
+    const ranking = [...players].sort((a, b) => b.score - a.score);
+    scoreList.innerHTML = ranking.slice(0, 3).map(player => `
+      <span class="score-chip ${player.id === room.drawerId ? "drawer-chip" : ""}" title="${escapeHtml(player.name)}">${escapeHtml(compactName(player.name))} · ${player.score}</span>
+    `).join("") + (ranking.length > 3 ? `<span class="score-chip">+${ranking.length - 3}</span>` : "");
+  }
+  const word = document.querySelector(".word-row .word");
+  if (word) {
+    const isDrawer = room.drawerId === state.playerId;
+    const isChoosing = room.status === "choosing";
+    const display = room.revealedWord || "".padStart(room.wordLength, "_");
+    word.innerHTML = wordDisplay(room, isDrawer, isChoosing, display);
+  }
+  const statusLine = document.querySelector(".game-header .small");
+  if (statusLine) {
+    const isDrawer = room.drawerId === state.playerId;
+    const isChoosing = room.status === "choosing";
+    statusLine.textContent = isChoosing ? (isDrawer ? "اختار كلمة للرسم" : `${room.drawerName} بيختار كلمة`) : (isDrawer ? "دورك ترسم الكلمة" : `الرسام: ${room.drawerName}`);
+  }
+  const pointsPill = document.querySelector(".game-header .pill");
+  if (pointsPill) pointsPill.textContent = `نقاطك: ${me?.score || 0}`;
 }
 
 function syncDrawEvents(events = [], forceFullRedraw = false) {
@@ -152,6 +244,7 @@ function persistPlayer(data) {
   state.code = data.room.code;
   localStorage.setItem("shakbata:name", state.name);
   localStorage.setItem("shakbata:playerId", state.playerId);
+  localStorage.setItem("shakbata:roomCode", data.room.code);
   connect(data.room, state.playerId);
 }
 
@@ -195,6 +288,13 @@ function renderHome() {
           <path class="draw-fill cat-fill" d="M168 98 C143 96 130 80 136 61 L127 43 L149 51 C160 43 180 43 191 51 L213 43 L204 61 C210 81 194 98 168 98 Z" />
         </svg>
       </div>
+      ${state.code && state.playerId ? html`
+        <div class="rejoin-banner">
+          <p class="small">عندك لعبة مفتوحة من قبل</p>
+          <button class="btn" data-rejoin style="width:100%;margin-top:6px">ارجع للعبة</button>
+          <button class="btn ghost" data-forget-rejoin style="width:100%;margin-top:6px">لعبة جديدة</button>
+        </div>
+      ` : ""}
       <h1 class="title">${invitedCode ? "ادخل الغرفة" : "ارسمها، وخليهم يخمنوا."}</h1>
       <p class="subtitle">${invitedCode ? `اكتب اسمك وانضم مباشرة لغرفة ${escapeHtml(invitedCode)}.` : "ادخل باسمك، اعمل غرفة بكود، وابدأ جولات رسم وتخمين عربية مع أصحابك."}</p>
       <label class="field">
@@ -214,7 +314,6 @@ function renderHome() {
           <button class="btn secondary" data-join>انضمام</button>
         </div>
         <button class="btn random-btn" data-quick style="width:100%;margin-top:10px">لعب عشوائي مع ناس</button>
-        <button class="btn ghost" data-demo style="width:100%;margin-top:10px">تجربة محلية سريعة</button>
       `}
       <div class="error" data-error></div>
     </section>
@@ -234,6 +333,16 @@ function bindHome() {
   document.querySelector("[data-cancel-invite]")?.addEventListener("click", () => {
     state.code = "";
     clearRoomLink();
+    renderHome();
+  });
+  document.querySelector("[data-rejoin]")?.addEventListener("click", () => {
+    connect({ code: state.code }, state.playerId);
+  });
+  document.querySelector("[data-forget-rejoin]")?.addEventListener("click", () => {
+    localStorage.removeItem("shakbata:playerId");
+    localStorage.removeItem("shakbata:roomCode");
+    state.playerId = "";
+    state.code = "";
     renderHome();
   });
   document.querySelector("[data-create]")?.addEventListener("click", async () => {
@@ -266,25 +375,17 @@ function bindHome() {
       setError(error.message);
     }
   });
-  document.querySelector("[data-demo]")?.addEventListener("click", async () => {
-    sync();
-    const firstName = state.name || "لاعب 1";
-    try {
-      const created = await api("/api/create", { name: firstName, settings: { rounds: 3, drawTime: 60 } });
-      persistPlayer(created);
-      clearRoomLink();
-      await api("/api/join", { name: "لاعب 2", code: created.room.code });
-      await api("/api/join", { name: "لاعب 3", code: created.room.code });
-    } catch (error) {
-      setError(error.message);
-    }
-  });
+}
+
+function activePlayers(room) {
+  return room.players.filter(player => player.connected !== false);
 }
 
 function renderLobby() {
   const room = state.room;
   const isPublic = room.isPublic;
   const isHost = room.hostId === state.playerId && !isPublic;
+  const players = activePlayers(room);
   app.className = "app lobby-screen";
   app.innerHTML = html`
     <header class="brand-bar">
@@ -300,11 +401,11 @@ function renderLobby() {
     </section>
     <section class="panel">
       <div class="brand-bar">
-        <strong>اللاعبين ${room.players.length}/${room.maxPlayers}</strong>
-        <span class="small">${lobbyStatusText(room, isHost)}</span>
+        <strong>اللاعبين ${players.length}/${room.maxPlayers}</strong>
+        <span class="small">${lobbyStatusText(room, isHost, players)}</span>
       </div>
       <div class="players" style="margin-top:10px">
-        ${room.players.map(player => html`
+        ${players.map(player => html`
           <div class="player">
             <strong>${escapeHtml(player.name)} ${player.id === room.hostId ? "★" : ""}</strong>
             <span>${player.score}</span>
@@ -312,21 +413,21 @@ function renderLobby() {
         `).join("")}
       </div>
     </section>
-    ${isPublic ? publicLobbyPanel(room) : privateLobbyPanel(room, isHost)}
+    ${isPublic ? publicLobbyPanel(room, players) : privateLobbyPanel(room, isHost, players)}
   `;
   bindLobby();
 }
 
-function lobbyStatusText(room, isHost) {
+function lobbyStatusText(room, isHost, players) {
   if (room.isPublic) {
-    if (room.players.length < 2) return "في انتظار لاعب عشوائي";
+    if (players.length < 2) return "في انتظار لاعب عشوائي";
     return room.autoStartAt ? "الماتش بيبدأ حالاً" : "جاهزين";
   }
   return isHost ? "أنت صاحب الغرفة" : "في انتظار البداية";
 }
 
-function publicLobbyPanel(room) {
-  const waiting = room.players.length < 2;
+function publicLobbyPanel(room, players) {
+  const waiting = players.length < 2;
   return html`
     <section class="panel matchmaking-panel">
       <strong>${waiting ? "بندور على ناس تلعب معاهم" : "لقينا لاعبين"}</strong>
@@ -337,7 +438,8 @@ function publicLobbyPanel(room) {
   `;
 }
 
-function privateLobbyPanel(room, isHost) {
+function privateLobbyPanel(room, isHost, players) {
+  const canStart = isHost && players.length >= 2;
   return html`
     <section class="panel">
       <div class="settings-grid">
@@ -345,8 +447,8 @@ function privateLobbyPanel(room, isHost) {
         <label class="field"><span>الثواني</span><select class="select" data-time ${isHost ? "" : "disabled"}>${[45,60,70,90,120].map(v => `<option ${room.drawTime === v ? "selected" : ""}>${v}</option>`).join("")}</select></label>
         <label class="field"><span>العدد</span><select class="select" data-max ${isHost ? "" : "disabled"}>${[4,6,8,10,12].map(v => `<option ${room.maxPlayers === v ? "selected" : ""}>${v}</option>`).join("")}</select></label>
       </div>
-      <button class="btn" data-start style="width:100%;margin-top:12px" ${isHost ? "" : "disabled"}>بدء اللعبة</button>
-      <div class="error" data-error>${room.players.length < 2 ? "تحتاج لاعبين على الأقل للبدء." : ""}</div>
+      <button class="btn" data-start style="width:100%;margin-top:12px" ${canStart ? "" : "disabled"}>بدء اللعبة</button>
+      <div class="error" data-error>${players.length < 2 ? "تحتاج لاعبين متصلين على الأقل للبدء." : ""}</div>
     </section>
   `;
 }
@@ -355,9 +457,11 @@ function bindLobby() {
   document.querySelector("[data-leave]").addEventListener("click", leaveRoom);
   document.querySelector("[data-share]")?.addEventListener("click", async () => {
     const link = roomLink(state.room.code);
-    const text = `تعالى العب شخبطة معايا!\nكود الغرفة: ${state.room.code}\n${link}`;
-    if (navigator.share) await navigator.share({ title: `شخبطة - غرفة ${state.room.code}`, text, url: link });
-    else await navigator.clipboard.writeText(text);
+    if (navigator.share) {
+      await navigator.share({ title: `شخبطة - غرفة ${state.room.code}`, url: link });
+    } else {
+      await navigator.clipboard.writeText(link);
+    }
   });
   document.querySelector("[data-start]")?.addEventListener("click", async () => {
     try {
@@ -384,10 +488,11 @@ function bindLobby() {
 function renderGame() {
   const room = state.room;
   const me = room.players.find(player => player.id === state.playerId);
+  const players = activePlayers(room);
   const isDrawer = room.drawerId === state.playerId;
   const isChoosing = room.status === "choosing";
   const word = room.revealedWord || "".padStart(room.wordLength, "_");
-  const ranking = [...room.players].sort((a, b) => b.score - a.score);
+  const ranking = [...players].sort((a, b) => b.score - a.score);
   app.className = "app game-screen";
   app.innerHTML = html`
     <section class="stage">
@@ -429,6 +534,7 @@ function renderGame() {
     </section>
   `;
   bindGame();
+  redrawCanvas();
 }
 
 function wordDisplay(room, isDrawer, isChoosing, word) {
@@ -446,7 +552,15 @@ function drawToolsHtml() {
     <div class="tools panel">
       <button class="icon-btn ${state.tool === "pen" ? "active" : ""}" data-tool="pen" title="قلم">✎</button>
       <button class="icon-btn ${state.tool === "eraser" ? "active" : ""}" data-tool="eraser" title="ممحاة">⌫</button>
-      <label class="color-picker" style="--picked-color:${state.color}" title="لون القلم"><input data-color-picker type="color" value="${state.color}" /></label>
+      <div class="color-picker-wrap">
+        <button class="color-current ${state.colorOpen ? "open" : ""}" style="background:${state.color}" title="لون القلم" data-toggle-color></button>
+        ${state.colorOpen ? `<div class="color-picker-backdrop" data-color-backdrop></div>` : ""}
+        <div class="color-dropdown ${state.colorOpen ? "open" : ""}">
+          ${COLORS.map(color => html`
+            <button class="color-swatch ${state.color === color ? "active" : ""}" data-color="${color}" style="background:${color}" aria-label="لون"></button>
+          `).join("")}
+        </div>
+      </div>
       <input class="size" data-size type="range" min="2" max="26" value="${state.size}" title="حجم القلم" />
       <button class="icon-btn" data-undo title="تراجع">↶</button>
       <button class="icon-btn" data-clear title="مسح">×</button>
@@ -480,9 +594,9 @@ function guessPlaceholder(isDrawer, isChoosing) {
 }
 
 function messageHtml(message) {
-  if (message.kind === "system") return `<div class="message system">${escapeHtml(message.text)}</div>`;
-  if (message.kind === "correct") return `<div class="message correct">${escapeHtml(message.text)}</div>`;
-  return `<div class="message"><strong>${escapeHtml(message.name)}:</strong> ${escapeHtml(message.text)}</div>`;
+  if (message.kind === "system") return `<div class="message system" data-id="${message.id}">${escapeHtml(message.text)}</div>`;
+  if (message.kind === "correct") return `<div class="message correct" data-id="${message.id}">${escapeHtml(message.text)}</div>`;
+  return `<div class="message" data-id="${message.id}"><strong>${escapeHtml(message.name)}:</strong> ${escapeHtml(message.text)}</div>`;
 }
 
 function bindGame() {
@@ -507,11 +621,21 @@ function bindGame() {
       await api("/api/choose-word", { code: state.room.code, playerId: state.playerId, word: button.dataset.wordChoice });
     });
   });
-  document.querySelector("[data-color-picker]")?.addEventListener("input", event => {
-    state.color = event.target.value;
-    state.tool = "pen";
-    const picker = document.querySelector(".color-picker");
-    if (picker) picker.style.setProperty("--picked-color", state.color);
+  document.querySelector("[data-toggle-color]")?.addEventListener("click", () => {
+    state.colorOpen = !state.colorOpen;
+    render();
+  });
+  document.querySelector("[data-color-backdrop]")?.addEventListener("click", () => {
+    state.colorOpen = false;
+    render();
+  });
+  document.querySelectorAll("[data-color]").forEach(button => {
+    button.addEventListener("click", () => {
+      state.color = button.dataset.color;
+      state.colorOpen = false;
+      state.tool = "pen";
+      render();
+    });
   });
   document.querySelector("[data-size]")?.addEventListener("input", event => {
     state.size = Number(event.target.value);
@@ -557,6 +681,7 @@ function leaveRoom() {
   state.drawEventCursor = 0;
   state.pendingRenderKey = "";
   localStorage.removeItem("shakbata:playerId");
+  localStorage.removeItem("shakbata:roomCode");
   renderHome();
 }
 
@@ -675,4 +800,4 @@ function tickTimer() {
   setTimeout(tickTimer, 350);
 }
 
-renderHome();
+tryReconnect();

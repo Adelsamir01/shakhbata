@@ -97,7 +97,7 @@ function normalizeText(value = "") {
 
 function cleanName(name) {
   const cleaned = String(name || "").trim().slice(0, 18);
-  if (!cleaned || blockedWords.some(word => normalizeText(cleaned).includes(normalizeText(word)))) {
+  if (!cleaned || cleaned.length < 1 || blockedWords.some(word => normalizeText(cleaned).includes(normalizeText(word)))) {
     return null;
   }
   return cleaned;
@@ -130,7 +130,8 @@ function publicRoom(room, viewerId = "") {
       name: player.name,
       score: player.score,
       guessed: player.guessed,
-      muted: player.muted
+      muted: player.muted,
+      connected: player.connected
     })),
     chat: room.chat.slice(-80),
     drawEvents: room.drawEvents.slice(-600),
@@ -139,10 +140,21 @@ function publicRoom(room, viewerId = "") {
 }
 
 function broadcast(room) {
+  const dead = [];
   for (const client of room.clients) {
+    if (client.destroyed || client.writableEnded) {
+      dead.push(client);
+      continue;
+    }
     const payload = `data: ${JSON.stringify({ type: "state", room: publicRoom(room, client.playerId) })}\n\n`;
-    client.write(payload);
+    try {
+      const ok = client.write(payload);
+      if (!ok) client.once("error", () => room.clients.delete(client));
+    } catch {
+      dead.push(client);
+    }
   }
+  for (const client of dead) room.clients.delete(client);
 }
 
 function addChat(room, entry) {
@@ -151,7 +163,7 @@ function addChat(room, entry) {
 }
 
 function addPlayer(room, name) {
-  const player = { id: crypto.randomUUID(), name, score: 0, guessed: false, muted: false };
+  const player = { id: crypto.randomUUID(), name, score: 0, guessed: false, muted: false, connected: true };
   room.players.push(player);
   addChat(room, { kind: "system", text: `${name} دخل الغرفة.` });
   return player;
@@ -202,9 +214,48 @@ function scheduleHintTimers(room) {
 
 function nextDrawer(room) {
   if (!room.players.length) return null;
-  const nextIndex = room.drawerIndex % room.players.length;
-  room.drawerIndex += 1;
-  return room.players[nextIndex].id;
+  for (let i = 0; i < room.players.length; i++) {
+    const nextIndex = room.drawerIndex % room.players.length;
+    room.drawerIndex += 1;
+    const player = room.players[nextIndex];
+    if (player.connected) return player.id;
+  }
+  return null;
+}
+
+function scheduleRoomCleanup(room) {
+  if (room.cleanupTimer) return;
+  room.cleanupTimer = setTimeout(() => {
+    if (connectedCount(room) === 0) {
+      clearTimeout(room.roundTimer);
+      clearTimeout(room.revealTimer);
+      clearTimeout(room.nextGameTimer);
+      clearTimeout(room.autoStartTimer);
+      rooms.delete(room.code);
+    }
+    room.cleanupTimer = null;
+  }, 60000);
+}
+
+function advanceDrawer(room) {
+  const current = getPlayer(room, room.drawerId);
+  if (current && current.connected) return;
+  const nextId = nextDrawer(room);
+  if (!nextId) {
+    if (room.status === "playing") revealRound(room, "الرسام خرج!");
+    return;
+  }
+  room.drawerId = nextId;
+  if (room.status === "choosing") {
+    room.wordOptions = pickWordOptions(3);
+    room.hintIndexes = [];
+    clearHintTimers(room);
+    room.endsAt = Date.now() + 12000;
+    clearTimeout(room.roundTimer);
+    room.roundTimer = setTimeout(() => chooseWord(room, room.wordOptions[0]), 12000);
+    addChat(room, { kind: "system", text: `${getPlayer(room, nextId)?.name || "لاعب"} بيختار كلمة.` });
+  }
+  broadcast(room);
 }
 
 function startRound(room) {
@@ -214,6 +265,13 @@ function startRound(room) {
     room.lastWinner = null;
     addChat(room, { kind: "system", text: "انتهت اللعبة! شوفوا الترتيب النهائي." });
     broadcast(room);
+    clearTimeout(room.nextGameTimer);
+    room.nextGameTimer = setTimeout(() => {
+      if (connectedCount(room) >= 2) {
+        resetGame(room);
+        startRound(room);
+      }
+    }, 10000);
     return;
   }
 
@@ -224,6 +282,12 @@ function startRound(room) {
   room.hintIndexes = [];
   clearHintTimers(room);
   room.drawerId = nextDrawer(room);
+  if (!room.drawerId) {
+    room.status = "ended";
+    addChat(room, { kind: "system", text: "مفيش لاعبين متصلين. الل-game اتوقف." });
+    broadcast(room);
+    return;
+  }
   room.endsAt = Date.now() + 12000;
   room.drawEvents = [];
   room.lastWinner = null;
@@ -236,6 +300,14 @@ function startRound(room) {
 
 function chooseWord(room, word) {
   if (room.status !== "choosing") return;
+  advanceDrawer(room);
+  if (room.status !== "choosing") return;
+  if (!room.drawerId || !getPlayer(room, room.drawerId)?.connected) {
+    room.status = "ended";
+    addChat(room, { kind: "system", text: "مفيش رسام متصل. اللعبة اتوقفت." });
+    broadcast(room);
+    return;
+  }
   const selected = room.wordOptions.includes(word) ? word : room.wordOptions[0];
   room.status = "playing";
   room.word = selected;
@@ -262,8 +334,25 @@ function revealRound(room, text) {
   broadcast(room);
 }
 
+function resetGame(room) {
+  room.round = 0;
+  room.drawerIndex = 0;
+  room.drawerId = null;
+  room.word = "";
+  room.wordOptions = [];
+  room.hintIndexes = [];
+  clearHintTimers(room);
+  room.drawEvents = [];
+  room.lastWinner = null;
+  for (const player of room.players) {
+    player.score = 0;
+    player.guessed = false;
+  }
+  addChat(room, { kind: "system", text: "لعبة جديدة!" });
+}
+
 function createRoom(hostName, settings = {}, options = {}) {
-  const player = { id: crypto.randomUUID(), name: hostName, score: 0, guessed: false, muted: false };
+  const player = { id: crypto.randomUUID(), name: hostName, score: 0, guessed: false, muted: false, connected: true };
   const room = {
     code: roomCode(),
     isPublic: Boolean(options.isPublic),
@@ -290,28 +379,37 @@ function createRoom(hostName, settings = {}, options = {}) {
     lastWinner: null,
     roundTimer: null,
     revealTimer: null,
+    nextGameTimer: null,
     autoStartTimer: null,
-    autoStartAt: null
+    autoStartAt: null,
+    cleanupTimer: null
   };
   addChat(room, { kind: "system", text: options.isPublic ? `${hostName} دخل اللعب العشوائي.` : `${hostName} أنشأ الغرفة.` });
   rooms.set(room.code, room);
   return { room, player };
 }
 
-function findPublicLobby() {
+function findPublicRoom() {
   return [...rooms.values()]
-    .filter(room => room.isPublic && room.status === "lobby" && room.players.length < room.settings.maxPlayers)
-    .sort((a, b) => b.players.length - a.players.length)[0];
+    .filter(room => room.isPublic && ["lobby", "ended"].includes(room.status) && connectedCount(room) < room.settings.maxPlayers)
+    .sort((a, b) => {
+      const score = room => {
+        if (room.status === "lobby") return 2;
+        return 1;
+      };
+      if (score(a) !== score(b)) return score(b) - score(a);
+      return connectedCount(b) - connectedCount(a);
+    })[0];
 }
 
 function schedulePublicStart(room) {
-  if (!room.isPublic || room.status !== "lobby" || room.players.length < 2 || room.autoStartTimer) return;
+  if (!room.isPublic || room.status !== "lobby" || connectedCount(room) < 2 || room.autoStartTimer) return;
   room.autoStartAt = Date.now() + 5000;
   addChat(room, { kind: "system", text: "الماتش هيبدأ خلال 5 ثواني." });
   room.autoStartTimer = setTimeout(() => {
     room.autoStartTimer = null;
     room.autoStartAt = null;
-    if (room.status === "lobby" && room.players.length >= 2) {
+    if (room.status === "lobby" && connectedCount(room) >= 2) {
       room.round = 0;
       room.drawerIndex = 0;
       for (const player of room.players) player.score = 0;
@@ -331,45 +429,88 @@ function getPlayer(room, playerId) {
   return room.players.find(player => player.id === playerId);
 }
 
+function connectedCount(room) {
+  return room.players.filter(player => player.connected).length;
+}
+
 function staticFile(req, res) {
   const requestedPath = decodeURIComponent(new URL(req.url, `http://${req.headers.host}`).pathname);
-  const filePath = requestedPath === "/" ? path.join(PUBLIC_DIR, "index.html") : path.join(PUBLIC_DIR, requestedPath);
-  if (!filePath.startsWith(PUBLIC_DIR)) return sendJson(res, 403, { error: "Forbidden" });
+  const filePath = requestedPath === "/"
+    ? path.join(PUBLIC_DIR, "index.html")
+    : path.resolve(PUBLIC_DIR, `.${requestedPath}`);
+  const publicRoot = `${path.resolve(PUBLIC_DIR)}${path.sep}`;
+  if (filePath !== path.join(PUBLIC_DIR, "index.html") && !filePath.startsWith(publicRoot)) {
+    return sendJson(res, 403, { error: "Forbidden" });
+  }
   fs.readFile(filePath, (error, content) => {
     if (error) return sendJson(res, 404, { error: "Not found" });
     const ext = path.extname(filePath);
     const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".webmanifest": "application/manifest+json" };
-    res.writeHead(200, { "content-type": `${types[ext] || "application/octet-stream"}; charset=utf-8` });
+    res.writeHead(200, {
+      "content-type": `${types[ext] || "application/octet-stream"}; charset=utf-8`,
+      "cache-control": "no-cache, no-store, must-revalidate",
+      "pragma": "no-cache",
+      "expires": "0"
+    });
     res.end(content);
   });
 }
 
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host}`);
+  try {
+    const url = new URL(req.url, `http://${req.headers.host}`);
 
-  if (req.method === "GET" && url.pathname === "/events") {
-    const room = getRoom(url.searchParams.get("room"));
-    const playerId = url.searchParams.get("player");
-    if (!room || !getPlayer(room, playerId)) {
-      res.writeHead(404);
-      res.end();
+    if (req.method === "GET" && url.pathname === "/events") {
+      const room = getRoom(url.searchParams.get("room"));
+      const playerId = url.searchParams.get("player");
+      if (!room || !getPlayer(room, playerId)) {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      res.writeHead(200, {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-cache",
+        connection: "keep-alive"
+      });
+      res.playerId = playerId;
+      room.clients.add(res);
+      const cleanup = () => room.clients.delete(res);
+      res.on("error", cleanup);
+      res.on("close", cleanup);
+      const player = getPlayer(room, playerId);
+      if (player) {
+        player.connected = true;
+        broadcast(room);
+      }
+      res.write(`data: ${JSON.stringify({ type: "state", room: publicRoom(room, playerId) })}\n\n`);
+      req.on("close", () => {
+        room.clients.delete(res);
+        const stillConnected = [...room.clients].some(client => client.playerId === playerId);
+        if (!stillConnected && player) {
+          player.connected = false;
+          addChat(room, { kind: "system", text: `${player.name} خرج.` });
+
+          if (room.drawerId === player.id) {
+            if (room.status === "choosing") advanceDrawer(room);
+            else if (room.status === "playing") revealRound(room, "الرسام خرج!");
+          }
+
+          if (room.status === "lobby" && connectedCount(room) < 2 && room.autoStartTimer) {
+            clearTimeout(room.autoStartTimer);
+            room.autoStartTimer = null;
+            room.autoStartAt = null;
+          }
+
+          if (connectedCount(room) === 0) scheduleRoomCleanup(room);
+          broadcast(room);
+        }
+      });
       return;
     }
-    res.writeHead(200, {
-      "content-type": "text/event-stream; charset=utf-8",
-      "cache-control": "no-cache",
-      connection: "keep-alive"
-    });
-    res.playerId = playerId;
-    room.clients.add(res);
-    res.write(`data: ${JSON.stringify({ type: "state", room: publicRoom(room, playerId) })}\n\n`);
-    req.on("close", () => room.clients.delete(res));
-    return;
-  }
 
-  if (!url.pathname.startsWith("/api/")) return staticFile(req, res);
+    if (!url.pathname.startsWith("/api/")) return staticFile(req, res);
 
-  try {
     if (req.method === "POST" && url.pathname === "/api/create") {
       const body = await readBody(req);
       const name = cleanName(body.name);
@@ -381,10 +522,11 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/join") {
       const body = await readBody(req);
       const name = cleanName(body.name);
-      const room = getRoom(body.code);
+      const code = String(body.code || "").trim().toUpperCase().slice(0, 8);
+      const room = getRoom(code);
       if (!name) return sendJson(res, 400, { error: "اكتب اسم مناسب." });
       if (!room) return sendJson(res, 404, { error: "الغرفة غير موجودة." });
-      if (room.players.length >= room.settings.maxPlayers) return sendJson(res, 409, { error: "الغرفة ممتلئة." });
+      if (connectedCount(room) >= room.settings.maxPlayers) return sendJson(res, 409, { error: "الغرفة ممتلئة." });
       if (room.status !== "lobby") return sendJson(res, 409, { error: "اللعبة بدأت بالفعل." });
       const player = addPlayer(room, name);
       broadcast(room);
@@ -396,17 +538,23 @@ const server = http.createServer(async (req, res) => {
       const name = cleanName(body.name);
       if (!name) return sendJson(res, 400, { error: "اكتب اسم مناسب." });
 
-      let room = findPublicLobby();
+      let room = findPublicRoom();
       let player;
       if (room) {
         player = addPlayer(room, name);
+        if (room.status === "lobby") {
+          schedulePublicStart(room);
+        } else if (room.status === "ended" && connectedCount(room) >= 2) {
+          resetGame(room);
+          startRound(room);
+        }
       } else {
         const created = createRoom(name, { rounds: 3, drawTime: 60, maxPlayers: 8 }, { isPublic: true });
         room = created.room;
         player = created.player;
+        schedulePublicStart(room);
       }
 
-      schedulePublicStart(room);
       broadcast(room);
       return sendJson(res, 200, { room: publicRoom(room, player.id), playerId: player.id });
     }
@@ -415,7 +563,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const room = getRoom(body.code);
       if (!room || room.hostId !== body.playerId) return sendJson(res, 403, { error: "لا يمكنك بدء هذه الغرفة." });
-      if (room.players.length < 2) return sendJson(res, 400, { error: "تحتاج لاعبين على الأقل." });
+      if (connectedCount(room) < 2) return sendJson(res, 400, { error: "تحتاج لاعبين متصلين على الأقل." });
       room.round = 0;
       room.drawerIndex = 0;
       for (const player of room.players) player.score = 0;
@@ -450,7 +598,7 @@ const server = http.createServer(async (req, res) => {
         if (drawer) drawer.score += 20;
         room.lastWinner ||= player.name;
         addChat(room, { kind: "correct", playerId: player.id, name: player.name, text: `${player.name} خمّن الكلمة! +${base}` });
-        const activeGuessers = room.players.filter(p => p.id !== room.drawerId);
+        const activeGuessers = room.players.filter(p => p.id !== room.drawerId && p.connected);
         if (activeGuessers.every(p => p.guessed)) revealRound(room, "كل اللاعبين خمنوا!");
         else broadcast(room);
         return sendJson(res, 200, { correct: true });
@@ -501,11 +649,12 @@ const server = http.createServer(async (req, res) => {
       broadcast(room);
       return sendJson(res, 200, { room: publicRoom(room, body.playerId) });
     }
-  } catch (error) {
-    return sendJson(res, 500, { error: "حدث خطأ في السيرفر." });
-  }
 
-  sendJson(res, 404, { error: "Not found" });
+    sendJson(res, 404, { error: "Not found" });
+  } catch (error) {
+    console.error("Request error:", error);
+    if (!res.headersSent) sendJson(res, 500, { error: "حدث خطأ في السيرفر." });
+  }
 });
 
 server.on("error", error => {
