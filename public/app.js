@@ -493,7 +493,7 @@ function renderGame() {
   const isChoosing = room.status === "choosing";
   const word = room.revealedWord || "".padStart(room.wordLength, "_");
   const ranking = [...players].sort((a, b) => b.score - a.score);
-  app.className = "app game-screen";
+  app.className = "app game-screen premium-game";
   app.innerHTML = html`
     <section class="stage">
       <header class="game-header">
