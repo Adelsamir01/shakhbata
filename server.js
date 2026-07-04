@@ -56,7 +56,52 @@ const words = [
   "حلاق", "عريس", "عروسة", "طفل", "جد", "جدة", "عائلة", "صديق", "جار", "ضيف"
 ];
 
-const blockedWords = ["غبي", "وسخ", "زبالة"];
+const blockedWords = [
+  // General insults
+  "غبي", "اغبيا", "غباء",
+  "اهبل", "هبل", "هبلة",
+  "عبيط", "عبيطة",
+  "احا", "احه", "اهان", "احنة",
+  "سافل", "سافلة", "سفالة",
+  "واطي", "واطية",
+  "حقير", "حقيرة", "حقارة",
+  "خسيس", "خسيسة",
+  "قذر", "قذارة",
+  "نجس", "نجاسة",
+  "زبالة", "زباله", "زبالين",
+  "وسخ", "وسخة", "وساخين",
+  "بضان", "بضانك",
+  // Sexual/profane
+  "كسم", "كسمك", "كسمها", "كسمهم", "كسمكما", "ياكسم",
+  "كس", "كوس", "كسها", "كسك", "كسي",
+  "زب", "زبي", "زبك", "زبو", "زبها", "يازب",
+  "طيز", "طيزك", "طيزي", "طيزها",
+  "بز", "بزاز", "بزها",
+  "بظر", "بظري",
+  "خرا", "خرى", "خره", "خراء",
+  "براز", "بول", "مني", "قضيب", "فرج", "فروج",
+  "نيك", "ناك", "ينيك", "بنيك", "منيك", "منيكة", "منيكه", "منيكين", "منيوك", "منيوكة", "منيوكين",
+  "فشخ", "فشخت", "فشخة",
+  // Slurs against women
+  "شرموطة", "شرموط", "شرموطه", "شرموطين", "شرموطات",
+  "قحبة", "قحبه", "قحاب",
+  "لبوة", "لبوه", "لبات",
+  "عاهرة", "عاهرات", "داعرة", "فاسقة",
+  // Slurs against men
+  "خول", "خواتين", "خولات",
+  "عرص", "عرصة", "عراص", "عرصات",
+  "متناك", "متناكة", "متناكين",
+  "زامل", "زامله", "زاملين",
+  "ديوث", "ديوثة", "ديوثين",
+  // LGBTQ+ slurs
+  "لواط", "لوطي", "لوطيين", "سحاق", "سحاقية", "سحاقيات", "شاذ", "شاذين", "شذوذ", "ميوع",
+  // Religious/ethnic slurs
+  "كافر", "كافرة", "كفرة",
+  "يهودي", "يهود", "نصراني", "صليبي",
+  "زنجي", "زنوج",
+  // Ableist slurs
+  "معاق", "معاقين", "مجنون", "مجانين", "عبيط"
+];
 
 const defaultStats = () => ({
   createdAt: new Date().toISOString(),
@@ -195,6 +240,15 @@ function normalizeText(value = "") {
     .toLowerCase();
 }
 
+function containsBlockedWord(value = "") {
+  const normalized = normalizeText(value);
+  const compact = normalized.replace(/\s+/g, "");
+  return blockedWords.some(word => {
+    const nw = normalizeText(word);
+    return normalized.includes(nw) || compact.includes(nw);
+  });
+}
+
 function editDistance(a, b) {
   const left = Array.from(a);
   const right = Array.from(b);
@@ -227,7 +281,7 @@ function isCloseGuess(guess, word) {
 
 function cleanName(name) {
   const cleaned = String(name || "").trim().slice(0, 18);
-  if (!cleaned || cleaned.length < 1 || blockedWords.some(word => normalizeText(cleaned).includes(normalizeText(word)))) {
+  if (!cleaned || cleaned.length < 1 || containsBlockedWord(cleaned)) {
     return null;
   }
   return cleaned;
@@ -999,7 +1053,7 @@ wss.on("connection", (ws, req) => {
       const text = String(data.text || "").trim().slice(0, 80);
       if (!text) return;
       if (player.muted) return;
-      if (blockedWords.some(word => normalizeText(text).includes(normalizeText(word)))) {
+      if (containsBlockedWord(text)) {
         addChat(room, { kind: "system", text: "تم حجب رسالة غير مناسبة." });
         broadcast(room);
         return;
