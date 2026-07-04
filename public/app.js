@@ -133,9 +133,7 @@ function tryReconnect() {
       if (!gotMessage && source.readyState !== EventSource.OPEN) {
         source.close();
         state.reconnecting = false;
-        localStorage.removeItem("shakbata:playerId");
         localStorage.removeItem("shakbata:roomCode");
-        state.playerId = "";
         state.code = "";
         state.room = null;
         renderHome();
@@ -409,7 +407,7 @@ function bindHome() {
   document.querySelector("[data-join]")?.addEventListener("click", async () => {
     sync();
     try {
-      const data = await api("/api/join", { name: state.name, code: state.code });
+      const data = await api("/api/join", { name: state.name, code: state.code, playerId: state.playerId });
       persistPlayer(data);
       clearRoomLink();
     } catch (error) {
@@ -419,7 +417,7 @@ function bindHome() {
   document.querySelector("[data-quick]")?.addEventListener("click", async () => {
     sync();
     try {
-      const data = await api("/api/quick-play", { name: state.name });
+      const data = await api("/api/quick-play", { name: state.name, playerId: state.playerId });
       persistPlayer(data);
       clearRoomLink();
     } catch (error) {
@@ -755,7 +753,6 @@ function leaveRoom() {
   state.renderKey = "";
   state.drawEventCursor = 0;
   state.pendingRenderKey = "";
-  localStorage.removeItem("shakbata:playerId");
   localStorage.removeItem("shakbata:roomCode");
   renderHome();
 }

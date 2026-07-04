@@ -772,8 +772,19 @@ const server = http.createServer(async (req, res) => {
       const name = cleanName(body.name);
       const code = String(body.code || "").trim().toUpperCase().slice(0, 8);
       const room = getRoom(code);
+      const existingPlayerId = String(body.playerId || "").trim();
       if (!name) return sendJson(res, 400, { error: "اكتب اسم مناسب." });
       if (!room) return sendJson(res, 404, { error: "الغرفة غير موجودة." });
+
+      const existing = existingPlayerId ? getPlayer(room, existingPlayerId) : null;
+      if (existing) {
+        existing.name = name;
+        existing.connected = true;
+        addChat(room, { kind: "system", text: `${name} رجع للغرفة.` });
+        broadcast(room);
+        return sendJson(res, 200, { room: publicRoom(room, existing.id), playerId: existing.id });
+      }
+
       if (connectedCount(room) >= room.settings.maxPlayers) return sendJson(res, 409, { error: "الغرفة ممتلئة." });
       if (room.status !== "lobby") return sendJson(res, 409, { error: "اللعبة بدأت بالفعل." });
       const player = addPlayer(room, name);
@@ -784,12 +795,21 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/quick-play") {
       const body = await readBody(req);
       const name = cleanName(body.name);
+      const existingPlayerId = String(body.playerId || "").trim();
       if (!name) return sendJson(res, 400, { error: "اكتب اسم مناسب." });
 
       let room = findPublicRoom();
       let player;
       if (room) {
-        player = addPlayer(room, name);
+        const existing = existingPlayerId ? getPlayer(room, existingPlayerId) : null;
+        if (existing) {
+          existing.name = name;
+          existing.connected = true;
+          addChat(room, { kind: "system", text: `${name} رجع للماتش.` });
+          player = existing;
+        } else {
+          player = addPlayer(room, name);
+        }
         if (room.status === "lobby") {
           schedulePublicStart(room);
         }
