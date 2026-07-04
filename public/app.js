@@ -339,10 +339,10 @@ function renderHome() {
         <span><strong>...</strong><small>تخمين صحيح</small></span>
       </div>
       <div class="error" data-error></div>
-      <footer class="home-footer">
-        <a href="https://adelsamir.com" target="_blank" rel="noopener noreferrer">Built by Adel Samir</a>
-      </footer>
     </section>
+    <footer class="home-footer">
+      <a href="https://adelsamir.com" target="_blank" rel="noopener noreferrer">Built by Adel Samir</a>
+    </footer>
   `;
   bindHome();
   loadHomeStats();
