@@ -24,7 +24,7 @@ function generateId() {
 
 const urlRoomCode = (new URLSearchParams(location.search).get("room") || new URLSearchParams(location.search).get("code") || "").trim().toUpperCase();
 const storedRoomCode = (localStorage.getItem("shakhbata:roomCode") || "").trim().toUpperCase();
-const storedPlayerId = localStorage.getItem("shakbata:playerId") || "";
+const storedPlayerId = localStorage.getItem("shakhbata:playerId") || "";
 let deviceId = localStorage.getItem("shakhbata:deviceId") || getCookie("shakhbata_deviceId") || "";
 if (!deviceId) {
   deviceId = generateId();
@@ -33,7 +33,7 @@ localStorage.setItem("shakhbata:deviceId", deviceId);
 setCookie("shakhbata_deviceId", deviceId, 365);
 
 const state = {
-  name: localStorage.getItem("shakbata:name") || "",
+  name: localStorage.getItem("shakhbata:name") || "",
   code: urlRoomCode || storedRoomCode,
   playerId: storedPlayerId,
   room: null,
@@ -191,7 +191,7 @@ function tryReconnect() {
   const urlRoom = (new URLSearchParams(location.search).get("room") || new URLSearchParams(location.search).get("code") || "").trim().toUpperCase();
   if (urlRoom) return renderHome();
   const savedCode = (localStorage.getItem("shakhbata:roomCode") || "").trim().toUpperCase();
-  const savedPlayerId = localStorage.getItem("shakbata:playerId") || "";
+  const savedPlayerId = localStorage.getItem("shakhbata:playerId") || "";
   if (!savedCode || !savedPlayerId) return renderHome();
   state.code = savedCode;
   state.playerId = savedPlayerId;
@@ -321,9 +321,9 @@ function persistPlayer(data) {
   state.playerId = data.playerId || state.playerId;
   state.code = data.room.code;
   state.wsReconnectDelay = 1000;
-  localStorage.setItem("shakbata:name", state.name);
-  localStorage.setItem("shakbata:playerId", state.playerId);
-  localStorage.setItem("shakbata:roomCode", data.room.code);
+  localStorage.setItem("shakhbata:name", state.name);
+  localStorage.setItem("shakhbata:playerId", state.playerId);
+  localStorage.setItem("shakhbata:roomCode", data.room.code);
   connectWS(data.room, state.playerId);
 }
 
@@ -447,8 +447,8 @@ function bindHome() {
     connectWS({ code: state.code }, state.playerId);
   });
   document.querySelector("[data-forget-rejoin]")?.addEventListener("click", () => {
-    localStorage.removeItem("shakbata:playerId");
-    localStorage.removeItem("shakbata:roomCode");
+    localStorage.removeItem("shakhbata:playerId");
+    localStorage.removeItem("shakhbata:roomCode");
     state.playerId = "";
     state.code = "";
     renderHome();
@@ -810,7 +810,7 @@ function leaveRoom() {
   state.renderKey = "";
   state.drawEventCursor = 0;
   state.pendingRenderKey = "";
-  localStorage.removeItem("shakbata:roomCode");
+  localStorage.removeItem("shakhbata:roomCode");
   renderHome();
 }
 

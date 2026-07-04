@@ -419,6 +419,7 @@ function advanceDrawer(room) {
   if (current && current.connected) return;
   const nextId = nextDrawer(room);
   if (!nextId) {
+    room.drawerId = null;
     if (room.status === "playing") revealRound(room, "الرسام خرج!");
     return;
   }
