@@ -323,6 +323,25 @@ function addPlayer(room, name) {
   return player;
 }
 
+function reconnectPlayer(room, name, playerId) {
+  const byId = playerId ? getPlayer(room, playerId) : null;
+  if (byId) {
+    byId.name = name;
+    byId.connected = true;
+    return byId;
+  }
+  const byName = room.players.find(player => player.name === name && !player.connected);
+  if (byName) {
+    byName.connected = true;
+    return byName;
+  }
+  return null;
+}
+
+function removeDuplicateNames(room, keeper) {
+  room.players = room.players.filter(player => player.id === keeper.id || !(player.name === keeper.name && !player.connected));
+}
+
 function pickWord() {
   return words[Math.floor(Math.random() * words.length)];
 }
@@ -822,10 +841,9 @@ const server = http.createServer(async (req, res) => {
       if (!name) return sendJson(res, 400, { error: "اكتب اسم مناسب." });
       if (!room) return sendJson(res, 404, { error: "الغرفة غير موجودة." });
 
-      const existing = existingPlayerId ? getPlayer(room, existingPlayerId) : null;
+      const existing = reconnectPlayer(room, name, existingPlayerId);
       if (existing) {
-        existing.name = name;
-        existing.connected = true;
+        removeDuplicateNames(room, existing);
         addChat(room, { kind: "system", text: `${name} رجع للغرفة.` });
         broadcast(room);
         return sendJson(res, 200, { room: publicRoom(room, existing.id), playerId: existing.id });
@@ -847,10 +865,9 @@ const server = http.createServer(async (req, res) => {
       let room = findPublicRoom();
       let player;
       if (room) {
-        const existing = existingPlayerId ? getPlayer(room, existingPlayerId) : null;
+        const existing = reconnectPlayer(room, name, existingPlayerId);
         if (existing) {
-          existing.name = name;
-          existing.connected = true;
+          removeDuplicateNames(room, existing);
           addChat(room, { kind: "system", text: `${name} رجع للماتش.` });
           player = existing;
         } else {
