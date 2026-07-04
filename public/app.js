@@ -188,10 +188,16 @@ function connectWS(room, playerId) {
 }
 
 function tryReconnect() {
-  if (!state.code || !state.playerId) return renderHome();
+  const urlRoom = (new URLSearchParams(location.search).get("room") || new URLSearchParams(location.search).get("code") || "").trim().toUpperCase();
+  if (urlRoom) return renderHome();
+  const savedCode = (localStorage.getItem("shakhbata:roomCode") || "").trim().toUpperCase();
+  const savedPlayerId = localStorage.getItem("shakbata:playerId") || "";
+  if (!savedCode || !savedPlayerId) return renderHome();
+  state.code = savedCode;
+  state.playerId = savedPlayerId;
   state.reconnecting = true;
   renderHome();
-  connectWS({ code: state.code }, state.playerId);
+  connectWS({ code: savedCode }, savedPlayerId);
 }
 
 function isLocalDrawerDrawing() {

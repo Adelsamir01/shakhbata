@@ -177,9 +177,20 @@ function assert(cond, msg) { if (!cond) throw new Error('ASSERT: ' + msg); }
   assert(state.players.length >= 1, 'public has players');
   console.log('  OK players', state.players.length);
 
+  console.log('TEST 18: Invite link join');
+  const invite = await api('/api/create', { name: 'Inviter', settings: { rounds: 2, drawTime: 30, maxPlayers: 6 }, deviceId: dev + '-inviter' });
+  const inviteJoin = await api('/api/join', { name: 'Invitee', code: invite.room.code, deviceId: dev + '-invitee' });
+  assert(inviteJoin.room.code === invite.room.code, 'joined invite room');
+  assert(inviteJoin.playerId !== invite.playerId, 'invitee gets new id');
+  const inviteeWs = await connectWS(invite.room.code, inviteJoin.playerId, 'invitee');
+  state = await inviteeWs.waitForState();
+  assert(state.players.length === 2, 'inviter + invitee in room');
+  console.log('  OK', invite.room.code);
+
   guestWs.close();
   qws1.close();
   qws2.close();
+  inviteeWs.close();
 
   console.log('\nALL TESTS PASSED');
 })().catch(e => {
