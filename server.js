@@ -848,28 +848,40 @@ const server = http.createServer(async (req, res) => {
       const name = cleanName(body.name);
       const existingPlayerId = String(body.playerId || "").trim();
       if (!name) return sendJson(res, 400, { error: "اسم مناسب مطلوب." });
-
-      let room = findPublicRoom();
-      let player;
       const deviceId = String(body.deviceId || "").trim();
-      if (room) {
-        const existing = reconnectPlayer(room, name, existingPlayerId, deviceId);
+
+      let room;
+      let player;
+
+      function placePlayer(targetRoom) {
+        const existing = reconnectPlayer(targetRoom, name, existingPlayerId, deviceId);
         if (existing) {
-          removeDuplicateNames(room, existing);
-          removeDuplicateDevices(room, existing);
-          addChat(room, { kind: "system", text: `عودة ${firstName(name)} للماتش.` });
-          player = existing;
-        } else {
-          player = addPlayer(room, name, deviceId);
+          removeDuplicateNames(targetRoom, existing);
+          removeDuplicateDevices(targetRoom, existing);
+          addChat(targetRoom, { kind: "system", text: `عودة ${firstName(name)} للماتش.` });
+          return existing;
         }
-        if (room.status === "lobby") {
+        return addPlayer(targetRoom, name, deviceId);
+      }
+
+      // 1) Rejoin any public room this device already belongs to, even if temporarily empty
+      const previousPublicRoom = deviceId ? [...rooms.values()].find(r => r.isPublic && r.players.some(p => p.deviceId === deviceId)) : null;
+      if (previousPublicRoom) {
+        room = previousPublicRoom;
+        player = placePlayer(room);
+        if (room.status === "lobby") schedulePublicStart(room);
+      } else {
+        // 2) Join an active public room, or 3) create a new one
+        room = findPublicRoom();
+        if (room) {
+          player = placePlayer(room);
+          if (room.status === "lobby") schedulePublicStart(room);
+        } else {
+          const created = createRoom(name, { rounds: 5, drawTime: 60, maxPlayers: 4 }, { isPublic: true, deviceId });
+          room = created.room;
+          player = created.player;
           schedulePublicStart(room);
         }
-      } else {
-        const created = createRoom(name, { rounds: 5, drawTime: 60, maxPlayers: 4 }, { isPublic: true, deviceId });
-        room = created.room;
-        player = created.player;
-        schedulePublicStart(room);
       }
 
       broadcast(room);
