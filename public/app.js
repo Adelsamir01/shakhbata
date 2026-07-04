@@ -491,16 +491,24 @@ function renderGame() {
   const players = activePlayers(room);
   const isDrawer = room.drawerId === state.playerId;
   const isChoosing = room.status === "choosing";
+  const isIntermission = room.status === "intermission";
+  const isPlaying = room.status === "playing";
+  const canGuess = isPlaying && !isDrawer;
   const word = room.revealedWord || "".padStart(room.wordLength, "_");
   const ranking = [...players].sort((a, b) => b.score - a.score);
+  const statusText = isIntermission
+    ? "جولة جديدة هتبدأ حالاً"
+    : isChoosing
+      ? (isDrawer ? "اختار كلمة للرسم" : `${escapeHtml(room.drawerName)} بيختار كلمة`)
+      : (isDrawer ? "دورك ترسم الكلمة" : `الرسام: ${escapeHtml(room.drawerName)}`);
   app.className = "app game-screen premium-game";
   app.innerHTML = html`
     <section class="stage">
       <header class="game-header">
         <div class="brand-bar">
           <div>
-            <strong>جولة ${room.round}/${room.totalRounds}</strong>
-            <div class="small">${isChoosing ? (isDrawer ? "اختار كلمة للرسم" : `${escapeHtml(room.drawerName)} بيختار كلمة`) : (isDrawer ? "دورك ترسم الكلمة" : `الرسام: ${escapeHtml(room.drawerName)}`)}</div>
+            <strong>${isIntermission ? "استراحة قصيرة" : `جولة ${room.round}/${room.totalRounds}`}</strong>
+            <div class="small">${statusText}</div>
           </div>
           <span class="pill">نقاطك: ${me?.score || 0}</span>
         </div>
@@ -516,19 +524,19 @@ function renderGame() {
         <div class="word">
           ${wordDisplay(room, isDrawer, isChoosing, word)}
         </div>
-        <span class="small">${isChoosing ? "اختيار" : (room.status === "reveal" ? "الكلمة" : `${room.wordLength} حروف`)}</span>
+        <span class="small">${isIntermission ? "استعداد" : (isChoosing ? "اختيار" : (room.status === "reveal" ? "الكلمة" : `${room.wordLength} حروف`))}</span>
       </div>
-      ${isChoosing ? `<div class="tools panel round-note">${isDrawer ? "اختار بسرعة. لو الوقت خلص هنختار أول كلمة." : "استعدوا للتخمين..."}</div>` : drawToolsHtml()}
+      ${isPlaying ? drawToolsHtml() : `<div class="tools panel round-note">${isIntermission ? "خليك هنا. اللعبة الجديدة بتبدأ تلقائياً." : (isChoosing ? (isDrawer ? "اختار بسرعة. لو الوقت خلص هنختار أول كلمة." : "استعدوا للتخمين...") : "استراحة قصيرة قبل الجولة التالية")}</div>`}
       <div class="canvas-wrap">
-        ${isChoosing ? chooseBoardHtml(room, isDrawer) : `<canvas id="board"></canvas>${isDrawer && room.status === "playing" ? "" : `<div class="canvas-lock">${room.status === "reveal" ? "استراحة قصيرة قبل الجولة التالية" : "أنت بتخمن من الدردشة"}</div>`}`}
+        ${isChoosing ? chooseBoardHtml(room, isDrawer) : `<canvas id="board"></canvas>${isDrawer && isPlaying ? "" : `<div class="canvas-lock">${isIntermission ? "اللعبة الجديدة بتبدأ دلوقتي..." : (room.status === "reveal" ? "استراحة قصيرة قبل الجولة التالية" : "أنت بتخمن من الدردشة")}</div>`}`}
       </div>
       <section class="panel chat-panel">
         <div class="chat" data-chat>
           ${room.chat.map(message => messageHtml(message)).join("")}
         </div>
         <form class="guess-form" data-guess-form>
-          <input class="input" data-guess placeholder="${guessPlaceholder(isDrawer, isChoosing)}" ${isDrawer ? "disabled" : ""} maxlength="80" />
-          <button class="btn" ${isDrawer ? "disabled" : ""}>↵</button>
+          <input class="input" data-guess placeholder="${guessPlaceholder(isDrawer, room.status)}" ${canGuess ? "" : "disabled"} maxlength="80" />
+          <button class="btn" ${canGuess ? "" : "disabled"}>↵</button>
         </form>
       </section>
     </section>
@@ -538,6 +546,7 @@ function renderGame() {
 }
 
 function wordDisplay(room, isDrawer, isChoosing, word) {
+  if (room.status === "intermission") return "جولة جديدة خلال ثواني";
   if (isChoosing) return isDrawer ? "اختار كلمة للرسم" : "في انتظار اختيار الكلمة";
   if (isDrawer || room.revealedWord) return escapeHtml(room.revealedWord);
   const hints = new Map((room.hintLetters || []).map(hint => [hint.index, hint.letter]));
@@ -588,9 +597,10 @@ function chooseBoardHtml(room, isDrawer) {
   `;
 }
 
-function guessPlaceholder(isDrawer, isChoosing) {
-  if (isDrawer) return isChoosing ? "اختار كلمة الأول" : "أنت الرسام في الجولة دي";
-  return isChoosing ? "استنى اختيار الكلمة" : "اكتب تخمينك";
+function guessPlaceholder(isDrawer, status) {
+  if (status === "intermission") return "الجولة الجديدة بتبدأ...";
+  if (isDrawer) return status === "choosing" ? "اختار كلمة الأول" : "أنت الرسام في الجولة دي";
+  return status === "choosing" ? "استنى اختيار الكلمة" : "اكتب تخمينك";
 }
 
 function messageHtml(message) {

@@ -260,6 +260,10 @@ function advanceDrawer(room) {
 
 function startRound(room) {
   if (room.round >= room.settings.rounds) {
+    if (room.isPublic) {
+      startPublicIntermission(room);
+      return;
+    }
     room.status = "ended";
     room.revealTimer = null;
     room.lastWinner = null;
@@ -295,6 +299,38 @@ function startRound(room) {
   addChat(room, { kind: "system", text: `الجولة ${room.round}. ${room.players.find(player => player.id === room.drawerId)?.name} بيختار كلمة.` });
   clearTimeout(room.roundTimer);
   room.roundTimer = setTimeout(() => chooseWord(room, room.wordOptions[0]), 12000);
+  broadcast(room);
+}
+
+function startPublicIntermission(room) {
+  room.status = "intermission";
+  room.endsAt = Date.now() + 4000;
+  room.drawerId = null;
+  room.word = "";
+  room.wordOptions = [];
+  room.hintIndexes = [];
+  room.lastWinner = null;
+  clearHintTimers(room);
+  clearTimeout(room.roundTimer);
+  clearTimeout(room.revealTimer);
+  clearTimeout(room.nextGameTimer);
+  addChat(room, { kind: "system", text: "جولة جديدة هتبدأ حالاً." });
+  room.nextGameTimer = setTimeout(() => {
+    room.nextGameTimer = null;
+    if (connectedCount(room) >= 2) {
+      resetGame(room);
+      startRound(room);
+      return;
+    }
+    room.status = "lobby";
+    room.round = 0;
+    room.drawerIndex = 0;
+    room.drawerId = null;
+    room.endsAt = null;
+    room.drawEvents = [];
+    schedulePublicStart(room);
+    broadcast(room);
+  }, 4000);
   broadcast(room);
 }
 
@@ -391,7 +427,7 @@ function createRoom(hostName, settings = {}, options = {}) {
 
 function findPublicRoom() {
   return [...rooms.values()]
-    .filter(room => room.isPublic && ["lobby", "ended"].includes(room.status) && connectedCount(room) < room.settings.maxPlayers)
+    .filter(room => room.isPublic && ["lobby", "intermission"].includes(room.status) && connectedCount(room) < room.settings.maxPlayers)
     .sort((a, b) => {
       const score = room => {
         if (room.status === "lobby") return 2;
@@ -544,9 +580,6 @@ const server = http.createServer(async (req, res) => {
         player = addPlayer(room, name);
         if (room.status === "lobby") {
           schedulePublicStart(room);
-        } else if (room.status === "ended" && connectedCount(room) >= 2) {
-          resetGame(room);
-          startRound(room);
         }
       } else {
         const created = createRoom(name, { rounds: 3, drawTime: 60, maxPlayers: 8 }, { isPublic: true });

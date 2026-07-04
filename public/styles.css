@@ -278,10 +278,13 @@ button {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-top: 0;
+  align-items: stretch;
 }
 
 .btn {
   min-height: 44px;
+  height: 44px;
+  border: 1px solid transparent;
   border-radius: 8px;
   display: inline-flex;
   align-items: center;
@@ -289,24 +292,41 @@ button {
   gap: 8px;
   padding: 0 14px;
   font-weight: 800;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
   color: white;
   background: var(--brand);
-  transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+  box-shadow: 0 1px 0 rgba(23, 32, 51, 0.08);
+  transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+}
+
+.btn:focus-visible,
+.icon-btn:focus-visible,
+.color-current:focus-visible,
+.word-option:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.18);
+}
+
+.btn:hover:not(:disabled) {
+  filter: brightness(1.03);
 }
 
 .btn:active {
-  transform: translateY(2px) scale(0.98);
+  transform: translateY(1px);
   filter: brightness(0.96);
 }
 
 .btn.secondary {
   color: var(--ink);
-  background: #f4efe7;
+  background: #fff;
+  border-color: var(--line);
 }
 
 .btn.ghost {
   color: var(--brand-dark);
-  background: transparent;
+  background: #fff;
   border: 1px solid var(--line);
 }
 
@@ -315,8 +335,9 @@ button {
 }
 
 .random-btn {
-  background: linear-gradient(135deg, var(--accent), #f97316);
-  box-shadow: 0 10px 22px rgba(225, 29, 72, 0.22);
+  color: #fff;
+  background: var(--ink);
+  box-shadow: 0 8px 18px rgba(23, 32, 51, 0.14);
 }
 
 .btn:disabled {
@@ -796,7 +817,7 @@ canvas {
 }
 
 .icon-btn {
-  width: 38px;
+  width: 40px;
   height: 38px;
   border-radius: 8px;
   border: 1px solid var(--line);
@@ -807,13 +828,14 @@ canvas {
   font-weight: 900;
   transition: transform 130ms ease, background 130ms ease, color 130ms ease;
   flex: 0 0 auto;
+  line-height: 1;
 }
 
 .premium-game .icon-btn,
 .premium-game .color-current {
   border-color: var(--line);
   background: #fff;
-  box-shadow: none;
+  box-shadow: 0 1px 0 rgba(23, 32, 51, 0.06);
 }
 
 .icon-btn:active {
@@ -979,6 +1001,7 @@ canvas {
   display: grid;
   grid-template-columns: 1fr 48px;
   gap: 6px;
+  align-items: stretch;
 }
 
 .premium-game .guess-form .input {
