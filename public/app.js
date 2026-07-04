@@ -523,6 +523,7 @@ function renderGame() {
   const isIntermission = room.status === "intermission";
   const isPlaying = room.status === "playing";
   const canGuess = isPlaying && !isDrawer;
+  const canDraw = isPlaying && isDrawer;
   const word = room.revealedWord || room.wordPattern || "".padStart(room.wordLength, "_");
   const ranking = [...players].sort((a, b) => b.score - a.score);
   const statusText = isIntermission
@@ -555,7 +556,7 @@ function renderGame() {
         </div>
         <span class="small">${isIntermission ? "استعداد" : (isChoosing ? "اختيار" : (room.status === "reveal" ? "الكلمة" : `${room.wordLength} حروف`))}</span>
       </div>
-      ${isPlaying ? drawToolsHtml() : `<div class="tools panel round-note">${isIntermission ? "خليك هنا. اللعبة الجديدة بتبدأ تلقائياً." : (isChoosing ? (isDrawer ? "اختار بسرعة. لو الوقت خلص هنختار أول كلمة." : "استعدوا للتخمين...") : "استراحة قصيرة قبل الجولة التالية")}</div>`}
+      ${canDraw ? drawToolsHtml() : `<div class="tools panel round-note">${isIntermission ? "خليك هنا. اللعبة الجديدة بتبدأ تلقائياً." : (isChoosing ? (isDrawer ? "اختار بسرعة. لو الوقت خلص هنختار أول كلمة." : "استعدوا للتخمين...") : (isPlaying ? "اكتب تخمينك في الدردشة" : "استراحة قصيرة قبل الجولة التالية"))}</div>`}
       <div class="canvas-wrap">
         ${isChoosing ? chooseBoardHtml(room, isDrawer) : `<canvas id="board"></canvas>${isDrawer && isPlaying ? "" : `<div class="canvas-lock">${isIntermission ? "اللعبة الجديدة بتبدأ دلوقتي..." : (room.status === "reveal" ? "استراحة قصيرة قبل الجولة التالية" : "أنت بتخمن من الدردشة")}</div>`}`}
       </div>

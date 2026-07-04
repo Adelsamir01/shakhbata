@@ -561,7 +561,7 @@ button {
 .stage {
   flex: 1;
   display: grid;
-  grid-template-rows: 48px 32px 44px minmax(0, 1fr) 48px 136px;
+  grid-template-rows: 48px 32px 44px minmax(0, 1fr) 86px 124px;
   gap: 6px;
   min-height: 0;
   overflow: hidden;
@@ -845,12 +845,18 @@ canvas {
 
 .tools {
   order: 5;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-rows: 40px 30px;
   gap: 6px;
   align-items: center;
   min-height: 0;
-  padding: 5px;
+  padding: 6px;
+}
+
+.tools > .icon-btn,
+.tools > .color-picker-wrap {
+  order: 1;
 }
 
 .premium-game .tools {
@@ -870,8 +876,8 @@ canvas {
 }
 
 .icon-btn {
-  width: 40px;
-  height: 38px;
+  width: 100%;
+  height: 40px;
   border-radius: 8px;
   border: 1px solid var(--line);
   background: #fff;
@@ -882,6 +888,7 @@ canvas {
   transition: transform 130ms ease, background 130ms ease, color 130ms ease;
   flex: 0 0 auto;
   line-height: 1;
+  font-size: 18px;
 }
 
 .premium-game .icon-btn,
@@ -910,12 +917,15 @@ canvas {
 
 .color-picker-wrap {
   position: relative;
-  flex: 0 0 auto;
+  width: 100%;
+  height: 40px;
+  min-width: 0;
+  display: block;
 }
 
 .color-current {
-  width: 38px;
-  height: 38px;
+  width: 100%;
+  height: 40px;
   border-radius: 8px;
   border: 1px solid var(--line);
   padding: 0;
@@ -980,8 +990,11 @@ canvas {
 }
 
 .size {
-  flex: 1 1 74px;
-  min-width: 74px;
+  grid-column: 1 / -1;
+  order: 2;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
   accent-color: var(--brand);
 }
 
@@ -1073,6 +1086,11 @@ canvas {
 .premium-game .guess-form .btn {
   background: var(--brand);
   box-shadow: none;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 18px;
 }
 
 .score-list {
@@ -1571,7 +1589,7 @@ canvas {
   }
 
   .stage {
-    grid-template-rows: 44px 30px 40px minmax(0, 1fr) 46px 118px;
+    grid-template-rows: 44px 30px 40px minmax(0, 1fr) 82px 108px;
     gap: 5px;
   }
 
@@ -1585,7 +1603,8 @@ canvas {
   }
 
   .tools {
-    padding: 4px;
+    grid-template-rows: 38px 28px;
+    padding: 5px;
   }
 
   .chat-panel {
@@ -1595,7 +1614,7 @@ canvas {
 
 @media (max-height: 600px) {
   .stage {
-    grid-template-rows: 42px 28px 38px minmax(0, 1fr) 44px 104px;
+    grid-template-rows: 42px 28px 38px minmax(0, 1fr) 78px 92px;
     gap: 4px;
   }
 
@@ -1620,8 +1639,12 @@ canvas {
 
   .icon-btn,
   .color-current {
-    width: 36px;
     height: 36px;
+  }
+
+  .tools {
+    grid-template-rows: 36px 26px;
+    gap: 5px;
   }
 
   .guess-form {
