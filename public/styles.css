@@ -389,6 +389,24 @@ button {
   margin-top: 8px;
 }
 
+.home-footer {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.home-footer a {
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 120ms ease;
+}
+
+.home-footer a:hover {
+  color: var(--brand-dark);
+  text-decoration: underline;
+}
+
 .room-header,
 .game-header {
   display: grid;
