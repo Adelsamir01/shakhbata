@@ -406,6 +406,8 @@ function nextDrawer(room) {
 
 function scheduleRoomCleanup(room) {
   if (room.cleanupTimer) return;
+  // Empty public rooms disappear quickly; private rooms wait longer for the host to reconnect
+  const delay = room.isPublic ? 10000 : 60000;
   room.cleanupTimer = setTimeout(() => {
     if (connectedCount(room) === 0) {
       clearTimeout(room.roundTimer);
@@ -415,7 +417,7 @@ function scheduleRoomCleanup(room) {
       rooms.delete(room.code);
     }
     room.cleanupTimer = null;
-  }, 60000);
+  }, delay);
 }
 
 function advanceDrawer(room) {
