@@ -9,6 +9,9 @@ services:
       - HOST=0.0.0.0
       - PORT=3000
       - NODE_ENV=production
+      - DATA_DIR=/app/data
+    volumes:
+      - ./data:/app/data
     deploy:
       resources:
         limits:

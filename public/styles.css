@@ -35,6 +35,13 @@ body {
   overscroll-behavior: none;
 }
 
+html:has(.stats-page),
+body:has(.stats-page) {
+  height: auto;
+  min-height: 100%;
+  overflow: auto;
+}
+
 button,
 input,
 select {
@@ -1162,6 +1169,74 @@ canvas {
   animation-delay: 180ms;
 }
 
+.stats-page {
+  width: min(100%, 980px);
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(14px, env(safe-area-inset-top)) 12px max(18px, env(safe-area-inset-bottom));
+}
+
+.stats-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.stats-header h1 {
+  margin: 4px 0 0;
+  font-size: clamp(28px, 6vw, 42px);
+  line-height: 1.1;
+}
+
+.stats-back {
+  color: var(--brand-dark);
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.stats-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.stats-card h2 {
+  margin: 0 0 10px;
+  font-size: 18px;
+}
+
+.stats-list {
+  display: grid;
+  gap: 6px;
+}
+
+.stats-list > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid #f0e7db;
+  padding-top: 7px;
+}
+
+.stats-list > div:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.stats-list span {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.stats-list strong {
+  font-size: 14px;
+  text-align: left;
+  white-space: nowrap;
+}
+
 @keyframes rise-in {
   from {
     opacity: 0;
@@ -1557,6 +1632,14 @@ canvas {
 @media (min-width: 820px) {
   .app {
     width: min(100%, 980px);
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stats-wide {
+    grid-column: 1 / -1;
   }
 
   .premium-game {
