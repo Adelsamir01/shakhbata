@@ -670,7 +670,7 @@ function createRoom(hostName, settings = {}, options = {}) {
 
 function findPublicRoom() {
   return [...rooms.values()]
-    .filter(room => room.isPublic && room.status !== "ended" && room.round <= 3 && connectedCount(room) < 5)
+    .filter(room => room.isPublic && room.status !== "ended" && room.round <= 3 && connectedCount(room) > 0 && connectedCount(room) < 5)
     .sort((a, b) => {
       const score = room => room.status === "lobby" ? 2 : 1;
       if (score(a) !== score(b)) return score(b) - score(a);
