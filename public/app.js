@@ -350,13 +350,16 @@ async function loadHomeStats() {
   if (!element) return;
   try {
     const data = await fetchStats();
-    element.innerHTML = html`
-      <span><strong>${data.totals.gamesStarted}</strong><small>لعبة</small></span>
-      <span><strong>${data.totals.playerJoins}</strong><small>لاعب</small></span>
-      <span><strong>${data.totals.correctGuesses}</strong><small>تخمين صحيح</small></span>
-    `;
+    const values = [data.totals.gamesStarted, data.totals.playerJoins, data.totals.correctGuesses];
+    const strongs = element.querySelectorAll("strong");
+    strongs.forEach((strong, index) => {
+      strong.textContent = values[index];
+      strong.style.animation = "none";
+      strong.offsetHeight;
+      strong.style.animation = "stat-pop 260ms var(--ease-pop) both";
+    });
   } catch {
-    element.remove();
+    element.style.display = "none";
   }
 }
 
