@@ -256,14 +256,16 @@ function publicRoom(room, viewerId = "") {
     wordOptions: canChooseWord ? room.wordOptions : [],
     endsAt: room.endsAt,
     autoStartAt: room.autoStartAt,
-    players: room.players.map(player => ({
-      id: player.id,
-      name: player.name,
-      score: player.score,
-      guessed: player.guessed,
-      muted: player.muted,
-      connected: player.connected
-    })),
+    players: room.players
+      .filter(player => player.connected)
+      .map(player => ({
+        id: player.id,
+        name: player.name,
+        score: player.score,
+        guessed: player.guessed,
+        muted: player.muted,
+        connected: player.connected
+      })),
     chat: visibleChat.slice(-80),
     drawEvents: room.drawEvents.slice(-600),
     lastWinner: room.lastWinner
