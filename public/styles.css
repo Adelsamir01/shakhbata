@@ -121,7 +121,6 @@ button {
 }
 
 .home-hero {
-  position: relative;
   min-height: 0;
   justify-content: center;
   align-items: center;
@@ -391,14 +390,11 @@ button {
 }
 
 .home-footer {
-  position: absolute;
-  bottom: max(6px, env(safe-area-inset-bottom));
-  left: 0;
-  right: 0;
   text-align: center;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.2;
   color: var(--muted);
+  margin-top: -2px;
 }
 
 .home-footer a {
