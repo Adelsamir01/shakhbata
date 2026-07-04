@@ -806,7 +806,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const name = cleanName(body.name);
       if (!name) return sendJson(res, 400, { error: "اكتب اسم مناسب." });
-      const { room, player } = createRoom(name, body.settings, {}, body.deviceId);
+      const { room, player } = createRoom(name, body.settings, { deviceId: body.deviceId });
       return sendJson(res, 200, { room: publicRoom(room, player.id), playerId: player.id });
     }
 
