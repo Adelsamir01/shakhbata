@@ -572,7 +572,7 @@ function renderGame() {
         </div>
         <form class="guess-form" data-guess-form>
           <input class="input" data-guess placeholder="${guessPlaceholder(isDrawer, room.status)}" ${canGuess ? "" : "disabled"} maxlength="80" />
-          <button class="btn" ${canGuess ? "" : "disabled"}>↵</button>
+          <button class="btn" ${canGuess ? "" : "disabled"}>➤</button>
         </form>
       </section>
     </section>
@@ -596,7 +596,7 @@ function wordDisplay(room, isDrawer, isChoosing, word) {
 function drawToolsHtml() {
   return html`
     <div class="tools panel ${state.sizeOpen ? "size-open" : ""}">
-      <button class="icon-btn ${state.tool === "pen" ? "active" : ""}" data-tool="pen" title="قلم">✎</button>
+      <button class="icon-btn ${state.tool === "pen" ? "active" : ""}" data-tool="pen" title="قلم">✏</button>
       <button class="icon-btn ${state.tool === "eraser" ? "active" : ""}" data-tool="eraser" title="ممحاة">⌫</button>
       <div class="color-picker-wrap">
         <button class="color-current ${state.colorOpen ? "open" : ""}" style="background:${state.color}" title="لون القلم" data-toggle-color></button>
@@ -609,7 +609,7 @@ function drawToolsHtml() {
       </div>
       ${state.sizeOpen ? `<input class="size" data-size type="range" min="2" max="26" value="${state.size}" title="حجم القلم" />` : ""}
       <button class="icon-btn" data-undo title="تراجع">↶</button>
-      <button class="icon-btn" data-clear title="مسح">×</button>
+      <button class="icon-btn" data-clear title="مسح">✕</button>
     </div>
   `;
 }

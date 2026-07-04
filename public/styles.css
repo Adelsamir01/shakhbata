@@ -800,13 +800,21 @@ canvas {
 }
 
 .premium-game .word-option {
+  background: #fff;
+  border-color: var(--brand);
+  color: var(--brand-dark);
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.1);
   animation: none;
-  transition: border-color 120ms ease, background-color 120ms ease;
+  transition: transform 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+}
+
+.premium-game .word-option:hover {
+  background: #f0fdf9;
 }
 
 .word-option:active {
   transform: translateY(2px);
-  box-shadow: none;
+  box-shadow: 0 2px 6px rgba(15, 118, 110, 0.1);
 }
 
 .word-option:nth-child(2) {
@@ -876,17 +884,23 @@ canvas {
   display: grid;
   place-items: center;
   font-weight: 900;
-  transition: transform 130ms ease, background 130ms ease, color 130ms ease;
+  transition: transform 130ms ease, background 130ms ease, color 130ms ease, border-color 130ms ease, box-shadow 130ms ease;
   flex: 0 0 auto;
   line-height: 1;
-  font-size: 18px;
+  font-size: 20px;
 }
 
 .premium-game .icon-btn,
 .premium-game .color-current {
   border-color: var(--line);
   background: #fff;
-  box-shadow: 0 1px 0 rgba(23, 32, 51, 0.06);
+  box-shadow: 0 2px 0 rgba(23, 32, 51, 0.06), 0 1px 2px rgba(23, 32, 51, 0.04);
+}
+
+.premium-game .icon-btn:hover:not(:disabled),
+.premium-game .color-current:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #d1d5db;
 }
 
 .icon-btn:active {
@@ -902,7 +916,8 @@ canvas {
 .premium-game .icon-btn.active {
   background: var(--ink);
   color: #fff;
-  box-shadow: none;
+  border-color: var(--ink);
+  box-shadow: 0 2px 0 rgba(23, 32, 51, 0.12);
   animation: none;
 }
 
@@ -915,6 +930,7 @@ canvas {
 }
 
 .color-current {
+  position: relative;
   width: 100%;
   height: 40px;
   border-radius: 8px;
@@ -922,6 +938,15 @@ canvas {
   padding: 0;
   cursor: pointer;
   transition: transform 130ms ease, box-shadow 130ms ease;
+}
+
+.color-current::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  border-radius: 5px;
+  pointer-events: none;
 }
 
 .color-current:active {
@@ -1076,12 +1101,21 @@ canvas {
 
 .premium-game .guess-form .btn {
   background: var(--brand);
-  box-shadow: none;
+  box-shadow: 0 2px 0 rgba(23, 32, 51, 0.1);
   height: 44px;
   min-height: 44px;
   padding: 0;
   border-radius: 8px;
   font-size: 18px;
+}
+
+.premium-game .guess-form .btn:hover:not(:disabled) {
+  filter: brightness(1.03);
+}
+
+.premium-game .guess-form .btn:active {
+  transform: translateY(1px);
+  box-shadow: none;
 }
 
 .score-list {
