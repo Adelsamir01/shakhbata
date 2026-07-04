@@ -350,6 +350,11 @@ function removeDuplicateNames(room, keeper) {
   room.players = room.players.filter(player => player.id === keeper.id || !(player.name === keeper.name && !player.connected));
 }
 
+function removeDuplicateDevices(room, keeper) {
+  if (!keeper.deviceId) return;
+  room.players = room.players.filter(player => player.id === keeper.id || player.deviceId !== keeper.deviceId);
+}
+
 function pickWord() {
   return words[Math.floor(Math.random() * words.length)];
 }
@@ -853,6 +858,7 @@ const server = http.createServer(async (req, res) => {
       const existing = reconnectPlayer(room, name, existingPlayerId, deviceId);
       if (existing) {
         removeDuplicateNames(room, existing);
+        removeDuplicateDevices(room, existing);
         addChat(room, { kind: "system", text: `${name} رجع للغرفة.` });
         broadcast(room);
         return sendJson(res, 200, { room: publicRoom(room, existing.id), playerId: existing.id });
@@ -878,6 +884,7 @@ const server = http.createServer(async (req, res) => {
         const existing = reconnectPlayer(room, name, existingPlayerId, deviceId);
         if (existing) {
           removeDuplicateNames(room, existing);
+          removeDuplicateDevices(room, existing);
           addChat(room, { kind: "system", text: `${name} رجع للماتش.` });
           player = existing;
         } else {
