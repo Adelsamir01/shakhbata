@@ -333,8 +333,11 @@ function assert(cond, msg) { if (!cond) throw new Error('ASSERT: ' + msg); }
   dup1Ws.close();
   await new Promise(r => setTimeout(r, 500));
   const dup2 = await api('/api/quick-play', { name: 'DupAgain', deviceId: `${dev}-dup` });
+  const dup2Ws = await connectWS(dup2.room.code, dup2.playerId, 'dup2');
+  await dup2Ws.waitForState();
   assert(dup2.playerId === dup1.playerId, 'same player on device rejoin');
   console.log('  OK');
+  dup2Ws.close();
 
   console.log('TEST 28: Non-host cannot start');
   const nh = await api('/api/create', { name: 'HostNH', settings: { rounds: 2, drawTime: 30, maxPlayers: 6 }, deviceId: dev + '-nh-host' });
