@@ -655,7 +655,8 @@ function statsSnapshot() {
 }
 
 function staticFile(req, res) {
-  const requestedPath = decodeURIComponent(new URL(req.url, `http://${req.headers.host}`).pathname);
+  const requestUrl = new URL(req.url, `http://${req.headers.host}`);
+  const requestedPath = decodeURIComponent(requestUrl.pathname);
   const filePath = requestedPath === "/"
     ? path.join(PUBLIC_DIR, "index.html")
     : requestedPath === "/stats"
@@ -669,12 +670,16 @@ function staticFile(req, res) {
     if (error) return sendJson(res, 404, { error: "Not found" });
     const ext = path.extname(filePath);
     const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".webmanifest": "application/manifest+json" };
-    res.writeHead(200, {
+    const isVersionedAsset = [".css", ".js"].includes(ext) && requestUrl.searchParams.has("v");
+    const headers = {
       "content-type": `${types[ext] || "application/octet-stream"}; charset=utf-8`,
-      "cache-control": "no-cache, no-store, must-revalidate",
-      "pragma": "no-cache",
-      "expires": "0"
-    });
+      "cache-control": isVersionedAsset ? "public, max-age=31536000, immutable" : "no-cache, no-store, must-revalidate"
+    };
+    if (!isVersionedAsset) {
+      headers.pragma = "no-cache";
+      headers.expires = "0";
+    }
+    res.writeHead(200, headers);
     res.end(content);
   });
 }

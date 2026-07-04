@@ -92,6 +92,7 @@ function connect(room, playerId) {
 
 function tryReconnect() {
   if (!state.code || !state.playerId) return renderHome();
+  renderHome();
   const source = new EventSource(`/events?room=${state.code}&player=${state.playerId}`);
   let gotMessage = false;
   let failTimer = null;
