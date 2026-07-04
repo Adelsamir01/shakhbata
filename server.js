@@ -984,12 +984,14 @@ wss.on("connection", (ws, req) => {
     return;
   }
   ws.isAlive = true;
+  ws.lastMessageAt = Date.now();
   ws.playerId = "";
   ws.roomCode = "";
 
-  ws.on("pong", () => { ws.isAlive = true; });
+  ws.on("pong", () => { ws.isAlive = true; ws.lastMessageAt = Date.now(); });
 
   ws.on("message", raw => {
+    ws.lastMessageAt = Date.now();
     let data;
     try {
       data = JSON.parse(raw);
@@ -1137,15 +1139,17 @@ wss.on("connection", (ws, req) => {
 });
 
 const heartbeat = setInterval(() => {
+  const now = Date.now();
   for (const ws of wss.clients) {
-    if (!ws.isAlive) {
+    // Terminate connections that have not responded to our ping or sent anything for 35 seconds
+    if (!ws.isAlive || (ws.lastMessageAt && now - ws.lastMessageAt > 35000)) {
       ws.terminate();
       continue;
     }
     ws.isAlive = false;
     ws.ping();
   }
-}, 30000);
+}, 10000);
 
 wss.on("close", () => clearInterval(heartbeat));
 

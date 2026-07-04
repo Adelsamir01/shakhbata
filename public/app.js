@@ -156,11 +156,17 @@ function connectWS(room, playerId) {
   state.ws = ws;
 
   let heartbeatTimer = null;
+  let lastServerMessage = Date.now();
   const startHeartbeat = () => {
     clearInterval(heartbeatTimer);
     heartbeatTimer = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) sendWS("ping");
-    }, 25000);
+      if (ws.readyState !== WebSocket.OPEN) return;
+      if (Date.now() - lastServerMessage > 35000) {
+        ws.close();
+        return;
+      }
+      sendWS("ping");
+    }, 10000);
   };
 
   ws.onopen = () => {
@@ -171,6 +177,7 @@ function connectWS(room, playerId) {
   };
 
   ws.onmessage = event => {
+    lastServerMessage = Date.now();
     try {
       handleServerMessage(JSON.parse(event.data));
     } catch {
