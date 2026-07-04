@@ -284,7 +284,7 @@ function render() {
 }
 
 function renderHome() {
-  const invitedCode = state.code.trim().toUpperCase();
+  const invitedCode = state.reconnecting ? "" : state.code.trim().toUpperCase();
   app.className = "app home-hero";
   app.innerHTML = html`
     <section class="panel">
