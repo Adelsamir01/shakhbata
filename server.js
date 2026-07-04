@@ -509,6 +509,7 @@ function startPublicIntermission(room) {
     room.nextGameTimer = null;
     if (connectedCount(room) >= 2) {
       resetGame(room);
+      room.settings.rounds = connectedCount(room) * 5;
       startRound(room);
       return;
     }
@@ -664,7 +665,7 @@ function createRoom(hostName, settings = {}, options = {}) {
 
 function findPublicRoom() {
   return [...rooms.values()]
-    .filter(room => room.isPublic && room.status !== "ended" && room.round <= 3 && connectedCount(room) < room.settings.maxPlayers)
+    .filter(room => room.isPublic && room.status !== "ended" && room.round <= 3 && connectedCount(room) < 5)
     .sort((a, b) => {
       const score = room => room.status === "lobby" ? 2 : 1;
       if (score(a) !== score(b)) return score(b) - score(a);
@@ -683,6 +684,7 @@ function schedulePublicStart(room) {
       room.round = 0;
       room.drawerIndex = 0;
       for (const player of room.players) player.score = 0;
+      room.settings.rounds = connectedCount(room) * 5;
       startRound(room);
     } else {
       broadcast(room);
@@ -859,7 +861,7 @@ const server = http.createServer(async (req, res) => {
           schedulePublicStart(room);
         }
       } else {
-        const created = createRoom(name, { rounds: 5, drawTime: 60, maxPlayers: 8 }, { isPublic: true, deviceId });
+        const created = createRoom(name, { rounds: 5, drawTime: 60, maxPlayers: 4 }, { isPublic: true, deviceId });
         room = created.room;
         player = created.player;
         schedulePublicStart(room);
