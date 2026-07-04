@@ -839,6 +839,7 @@ const server = http.createServer(async (req, res) => {
       if (connectedCount(room) >= room.settings.maxPlayers) return sendJson(res, 409, { error: "الغرفة ممتلئة." });
       if (room.status !== "lobby") return sendJson(res, 409, { error: "اللعبة بدأت بالفعل." });
       const player = addPlayer(room, name, deviceId);
+      if (room.isPublic) schedulePublicStart(room);
       broadcast(room);
       return sendJson(res, 200, { room: publicRoom(room, player.id), playerId: player.id });
     }

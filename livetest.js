@@ -313,7 +313,8 @@ function assert(cond, msg) { if (!cond) throw new Error('ASSERT: ' + msg); }
 
   console.log('TEST 26: Public game auto loop');
   const pub1 = await api('/api/quick-play', { name: 'Loop1', deviceId: `${dev}-loop1` });
-  const pub2 = await api('/api/quick-play', { name: 'Loop2', deviceId: `${dev}-loop2` });
+  const pub2 = await api('/api/join', { name: 'Loop2', code: pub1.room.code, deviceId: `${dev}-loop2` });
+  assert(pub2.room.code === pub1.room.code, 'both players in same public room');
   const loop1Ws = await connectWS(pub1.room.code, pub1.playerId, 'loop1');
   const loop2Ws = await connectWS(pub2.room.code, pub2.playerId, 'loop2');
   await loop1Ws.waitForState();
@@ -375,6 +376,7 @@ function assert(cond, msg) { if (!cond) throw new Error('ASSERT: ' + msg); }
   njWs.close();
 
   console.log('\nALL TESTS PASSED');
+  process.exit(0);
 })().catch(e => {
   console.error('\nTEST FAILED:', e.message);
   process.exit(1);
