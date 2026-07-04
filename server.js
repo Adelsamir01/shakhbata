@@ -595,12 +595,9 @@ function createRoom(hostName, settings = {}, options = {}) {
 
 function findPublicRoom() {
   return [...rooms.values()]
-    .filter(room => room.isPublic && ["lobby", "intermission"].includes(room.status) && connectedCount(room) < room.settings.maxPlayers)
+    .filter(room => room.isPublic && room.status !== "ended" && room.round <= 3 && connectedCount(room) < room.settings.maxPlayers)
     .sort((a, b) => {
-      const score = room => {
-        if (room.status === "lobby") return 2;
-        return 1;
-      };
+      const score = room => room.status === "lobby" ? 2 : 1;
       if (score(a) !== score(b)) return score(b) - score(a);
       return connectedCount(b) - connectedCount(a);
     })[0];
@@ -797,7 +794,7 @@ const server = http.createServer(async (req, res) => {
           schedulePublicStart(room);
         }
       } else {
-        const created = createRoom(name, { rounds: 3, drawTime: 60, maxPlayers: 8 }, { isPublic: true });
+        const created = createRoom(name, { rounds: 10, drawTime: 60, maxPlayers: 8 }, { isPublic: true });
         room = created.room;
         player = created.player;
         schedulePublicStart(room);
