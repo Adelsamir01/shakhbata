@@ -551,7 +551,11 @@ button {
 .stage {
   flex: 1;
   display: grid;
-  grid-template-rows: 48px 32px 44px minmax(0, 1fr) 86px 124px;
+  grid-template-rows: 48px 32px 44px minmax(0, 1fr) 54px 156px;
+}
+
+.stage.size-open {
+  grid-template-rows: 48px 32px 44px minmax(0, 1fr) 90px 120px;
   gap: 6px;
   min-height: 0;
   overflow: hidden;
@@ -1557,8 +1561,12 @@ canvas {
   }
 
   .stage {
-    grid-template-rows: 44px 30px 40px minmax(0, 1fr) 82px 108px;
+    grid-template-rows: 44px 30px 40px minmax(0, 1fr) 50px 140px;
     gap: 5px;
+  }
+
+  .stage.size-open {
+    grid-template-rows: 44px 30px 40px minmax(0, 1fr) 82px 108px;
   }
 
   .timer {
@@ -1586,8 +1594,12 @@ canvas {
 
 @media (max-height: 600px) {
   .stage {
-    grid-template-rows: 42px 28px 38px minmax(0, 1fr) 78px 92px;
+    grid-template-rows: 42px 28px 38px minmax(0, 1fr) 46px 124px;
     gap: 4px;
+  }
+
+  .stage.size-open {
+    grid-template-rows: 42px 28px 38px minmax(0, 1fr) 78px 92px;
   }
 
   .game-header strong,

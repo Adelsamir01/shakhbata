@@ -16,7 +16,7 @@ const state = {
   tool: "pen",
   color: "#111827",
   colorOpen: false,
-  sizeOpen: true,
+  sizeOpen: false,
   size: 7,
   strokes: [],
   isDrawing: false,
@@ -539,7 +539,7 @@ function renderGame() {
       : (isDrawer ? "دورك ترسم الكلمة" : `الرسام: ${escapeHtml(room.drawerName)}`);
   app.className = "app game-screen premium-game";
   app.innerHTML = html`
-    <section class="stage ${isDrawer ? "" : "guesser-mode"}">
+    <section class="stage ${isDrawer ? "" : "guesser-mode"} ${canDraw && state.sizeOpen ? "size-open" : ""}">
       <header class="game-header">
         <div class="brand-bar">
           <div>
