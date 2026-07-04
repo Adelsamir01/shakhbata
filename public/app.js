@@ -66,6 +66,12 @@ async function api(path, body) {
   return data;
 }
 
+async function fetchStats() {
+  const response = await fetch("/api/stats");
+  if (!response.ok) throw new Error("stats unavailable");
+  return response.json();
+}
+
 function setError(message) {
   const element = document.querySelector("[data-error]");
   if (element) element.textContent = message || "";
@@ -137,6 +143,7 @@ function roomRenderKey(room) {
     drawerId: room.drawerId,
     drawerName: room.drawerName,
     wordLength: room.wordLength,
+    wordPattern: room.wordPattern,
     revealedWord: room.revealedWord,
     hintLetters: room.hintLetters,
     wordOptions: room.wordOptions,
@@ -194,7 +201,7 @@ function patchLiveUI(room) {
   if (word) {
     const isDrawer = room.drawerId === state.playerId;
     const isChoosing = room.status === "choosing";
-    const display = room.revealedWord || "".padStart(room.wordLength, "_");
+    const display = room.revealedWord || room.wordPattern || "".padStart(room.wordLength, "_");
     word.innerHTML = wordDisplay(room, isDrawer, isChoosing, display);
   }
   const statusLine = document.querySelector(".game-header .small");
@@ -315,10 +322,32 @@ function renderHome() {
         </div>
         <button class="btn random-btn" data-quick style="width:100%;margin-top:10px">لعب عشوائي مع ناس</button>
       `}
+      <div class="home-stats" data-home-stats>
+        <span><strong>...</strong><small>لعبة</small></span>
+        <span><strong>...</strong><small>لاعب</small></span>
+        <span><strong>...</strong><small>تخمين صحيح</small></span>
+      </div>
+      <a class="stats-link" href="/stats">كل الإحصائيات</a>
       <div class="error" data-error></div>
     </section>
   `;
   bindHome();
+  loadHomeStats();
+}
+
+async function loadHomeStats() {
+  const element = document.querySelector("[data-home-stats]");
+  if (!element) return;
+  try {
+    const data = await fetchStats();
+    element.innerHTML = html`
+      <span><strong>${data.totals.gamesStarted}</strong><small>لعبة</small></span>
+      <span><strong>${data.totals.playerJoins}</strong><small>لاعب</small></span>
+      <span><strong>${data.totals.correctGuesses}</strong><small>تخمين صحيح</small></span>
+    `;
+  } catch {
+    element.remove();
+  }
 }
 
 function bindHome() {
@@ -494,7 +523,7 @@ function renderGame() {
   const isIntermission = room.status === "intermission";
   const isPlaying = room.status === "playing";
   const canGuess = isPlaying && !isDrawer;
-  const word = room.revealedWord || "".padStart(room.wordLength, "_");
+  const word = room.revealedWord || room.wordPattern || "".padStart(room.wordLength, "_");
   const ranking = [...players].sort((a, b) => b.score - a.score);
   const statusText = isIntermission
     ? "جولة جديدة هتبدأ حالاً"
@@ -551,6 +580,7 @@ function wordDisplay(room, isDrawer, isChoosing, word) {
   if (isDrawer || room.revealedWord) return escapeHtml(room.revealedWord);
   const hints = new Map((room.hintLetters || []).map(hint => [hint.index, hint.letter]));
   return Array.from(word).map((_, index) => {
+    if (word[index] === " ") return `<span class="word-space"></span>`;
     const letter = hints.get(index);
     return `<span class="letter ${letter ? "hinted" : ""}">${letter ? escapeHtml(letter) : ""}</span>`;
   }).join("");
@@ -605,6 +635,7 @@ function guessPlaceholder(isDrawer, status) {
 
 function messageHtml(message) {
   if (message.kind === "system") return `<div class="message system" data-id="${message.id}">${escapeHtml(message.text)}</div>`;
+  if (message.kind === "hint") return `<div class="message hint" data-id="${message.id}">${escapeHtml(message.text)}</div>`;
   if (message.kind === "correct") return `<div class="message correct" data-id="${message.id}">${escapeHtml(message.text)}</div>`;
   return `<div class="message" data-id="${message.id}"><strong>${escapeHtml(message.name)}:</strong> ${escapeHtml(message.text)}</div>`;
 }

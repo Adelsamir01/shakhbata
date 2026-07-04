@@ -6,6 +6,8 @@ const crypto = require("crypto");
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "127.0.0.1";
 const PUBLIC_DIR = path.join(__dirname, "public");
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
+const STATS_PATH = path.join(DATA_DIR, "stats.json");
 const rooms = new Map();
 
 const words = [
@@ -55,6 +57,103 @@ const words = [
 
 const blockedWords = ["غبي", "وسخ", "زبالة"];
 
+const defaultStats = () => ({
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  totals: {
+    roomsCreated: 0,
+    publicRoomsCreated: 0,
+    privateRoomsCreated: 0,
+    playerJoins: 0,
+    publicPlayerJoins: 0,
+    privatePlayerJoins: 0,
+    gamesStarted: 0,
+    publicGamesStarted: 0,
+    privateGamesStarted: 0,
+    gamesCompleted: 0,
+    publicGamesCompleted: 0,
+    privateGamesCompleted: 0,
+    roundsStarted: 0,
+    roundsCompleted: 0,
+    guesses: 0,
+    correctGuesses: 0,
+    closeGuesses: 0,
+    chatMessages: 0,
+    drawEvents: 0,
+    strokes: 0,
+    clears: 0,
+    undos: 0
+  },
+  max: {
+    concurrentRooms: 0,
+    concurrentPlayers: 0,
+    playersInRoom: 0
+  },
+  words: {}
+});
+
+function mergeDefaults(base, fallback) {
+  for (const [key, value] of Object.entries(fallback)) {
+    if (base[key] === undefined) base[key] = value;
+    else if (value && typeof value === "object" && !Array.isArray(value)) mergeDefaults(base[key], value);
+  }
+  return base;
+}
+
+function loadStats() {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.existsSync(STATS_PATH)) {
+      const fresh = defaultStats();
+      fs.writeFileSync(STATS_PATH, JSON.stringify(fresh, null, 2));
+      return fresh;
+    }
+    return mergeDefaults(JSON.parse(fs.readFileSync(STATS_PATH, "utf8")), defaultStats());
+  } catch (error) {
+    console.error("Could not load stats:", error);
+    return defaultStats();
+  }
+}
+
+const stats = loadStats();
+let saveStatsTimer = null;
+
+function saveStats() {
+  stats.updatedAt = new Date().toISOString();
+  clearTimeout(saveStatsTimer);
+  saveStatsTimer = setTimeout(() => {
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(STATS_PATH, JSON.stringify(stats, null, 2));
+    } catch (error) {
+      console.error("Could not save stats:", error);
+    }
+  }, 100);
+}
+
+function bump(pathKey, amount = 1) {
+  const parts = pathKey.split(".");
+  let target = stats;
+  for (const part of parts.slice(0, -1)) target = target[part] ||= {};
+  target[parts[parts.length - 1]] = (Number(target[parts[parts.length - 1]]) || 0) + amount;
+  saveStats();
+}
+
+function updateMaxStats(room = null) {
+  const livePlayers = [...rooms.values()].reduce((sum, item) => sum + connectedCount(item), 0);
+  stats.max.concurrentRooms = Math.max(stats.max.concurrentRooms, rooms.size);
+  stats.max.concurrentPlayers = Math.max(stats.max.concurrentPlayers, livePlayers);
+  if (room) stats.max.playersInRoom = Math.max(stats.max.playersInRoom, room.players.length);
+  saveStats();
+}
+
+function trackWord(word, key) {
+  if (!word) return;
+  const entry = stats.words[word] ||= { chosen: 0, guessed: 0 };
+  entry[key] = (Number(entry[key]) || 0) + 1;
+  saveStats();
+}
+
 function sendJson(res, status, data) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(data));
@@ -95,6 +194,36 @@ function normalizeText(value = "") {
     .toLowerCase();
 }
 
+function editDistance(a, b) {
+  const left = Array.from(a);
+  const right = Array.from(b);
+  const dp = Array.from({ length: left.length + 1 }, () => Array(right.length + 1).fill(0));
+  for (let i = 0; i <= left.length; i += 1) dp[i][0] = i;
+  for (let j = 0; j <= right.length; j += 1) dp[0][j] = j;
+  for (let i = 1; i <= left.length; i += 1) {
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return dp[left.length][right.length];
+}
+
+function isCloseGuess(guess, word) {
+  const normalizedGuess = normalizeText(guess);
+  const normalizedWord = normalizeText(word);
+  if (!normalizedGuess || normalizedGuess === normalizedWord || normalizedWord.length < 3) return false;
+  const compactGuess = normalizedGuess.replace(/\s+/g, "");
+  const compactWord = normalizedWord.replace(/\s+/g, "");
+  const distance = Math.min(editDistance(normalizedGuess, normalizedWord), editDistance(compactGuess, compactWord));
+  const limit = normalizedWord.length <= 5 ? 1 : 2;
+  return distance <= limit;
+}
+
 function cleanName(name) {
   const cleaned = String(name || "").trim().slice(0, 18);
   if (!cleaned || cleaned.length < 1 || blockedWords.some(word => normalizeText(cleaned).includes(normalizeText(word)))) {
@@ -108,6 +237,7 @@ function publicRoom(room, viewerId = "") {
   const canSeeWord = room.status === "reveal" || room.status === "ended" || viewerId === room.drawerId;
   const canChooseWord = room.status === "choosing" && viewerId === room.drawerId;
   const canSeeHints = room.status === "playing" && viewerId !== room.drawerId;
+  const visibleChat = room.chat.filter(message => !message.toPlayerId || message.toPlayerId === viewerId);
   return {
     code: room.code,
     isPublic: room.isPublic,
@@ -119,7 +249,8 @@ function publicRoom(room, viewerId = "") {
     maxPlayers: room.settings.maxPlayers,
     drawerId: room.drawerId,
     drawerName: room.players.find(player => player.id === room.drawerId)?.name || "",
-    wordLength: currentWord.length,
+    wordLength: currentWord.replace(/\s+/g, "").length,
+    wordPattern: currentWord.replace(/[^\s]/g, "_"),
     revealedWord: canSeeWord ? currentWord : "",
     hintLetters: canSeeHints ? visibleHintLetters(room) : [],
     wordOptions: canChooseWord ? room.wordOptions : [],
@@ -133,7 +264,7 @@ function publicRoom(room, viewerId = "") {
       muted: player.muted,
       connected: player.connected
     })),
-    chat: room.chat.slice(-80),
+    chat: visibleChat.slice(-80),
     drawEvents: room.drawEvents.slice(-600),
     lastWinner: room.lastWinner
   };
@@ -166,6 +297,9 @@ function addPlayer(room, name) {
   const player = { id: crypto.randomUUID(), name, score: 0, guessed: false, muted: false, connected: true };
   room.players.push(player);
   addChat(room, { kind: "system", text: `${name} دخل الغرفة.` });
+  bump("totals.playerJoins");
+  bump(room.isPublic ? "totals.publicPlayerJoins" : "totals.privatePlayerJoins");
+  updateMaxStats(room);
   return player;
 }
 
@@ -261,12 +395,16 @@ function advanceDrawer(room) {
 function startRound(room) {
   if (room.round >= room.settings.rounds) {
     if (room.isPublic) {
+      bump("totals.gamesCompleted");
+      bump("totals.publicGamesCompleted");
       startPublicIntermission(room);
       return;
     }
     room.status = "ended";
     room.revealTimer = null;
     room.lastWinner = null;
+    bump("totals.gamesCompleted");
+    bump("totals.privateGamesCompleted");
     addChat(room, { kind: "system", text: "انتهت اللعبة! شوفوا الترتيب النهائي." });
     broadcast(room);
     clearTimeout(room.nextGameTimer);
@@ -280,7 +418,12 @@ function startRound(room) {
   }
 
   room.status = "choosing";
+  if (room.round === 0) {
+    bump("totals.gamesStarted");
+    bump(room.isPublic ? "totals.publicGamesStarted" : "totals.privateGamesStarted");
+  }
   room.round += 1;
+  bump("totals.roundsStarted");
   room.word = "";
   room.wordOptions = pickWordOptions(3);
   room.hintIndexes = [];
@@ -347,6 +490,7 @@ function chooseWord(room, word) {
   const selected = room.wordOptions.includes(word) ? word : room.wordOptions[0];
   room.status = "playing";
   room.word = selected;
+  trackWord(selected, "chosen");
   room.wordOptions = [];
   room.hintIndexes = pickHintIndexes(selected);
   room.startedAt = Date.now();
@@ -362,6 +506,7 @@ function revealRound(room, text) {
   if (room.status !== "playing") return;
   room.status = "reveal";
   room.endsAt = Date.now() + 5000;
+  bump("totals.roundsCompleted");
   clearHintTimers(room);
   addChat(room, { kind: "system", text: `${text} الكلمة كانت: ${room.word}` });
   clearTimeout(room.roundTimer);
@@ -422,6 +567,11 @@ function createRoom(hostName, settings = {}, options = {}) {
   };
   addChat(room, { kind: "system", text: options.isPublic ? `${hostName} دخل اللعب العشوائي.` : `${hostName} أنشأ الغرفة.` });
   rooms.set(room.code, room);
+  bump("totals.roomsCreated");
+  bump(room.isPublic ? "totals.publicRoomsCreated" : "totals.privateRoomsCreated");
+  bump("totals.playerJoins");
+  bump(room.isPublic ? "totals.publicPlayerJoins" : "totals.privatePlayerJoins");
+  updateMaxStats(room);
   return { room, player };
 }
 
@@ -469,10 +619,47 @@ function connectedCount(room) {
   return room.players.filter(player => player.connected).length;
 }
 
+function statsSnapshot() {
+  const liveRooms = [...rooms.values()];
+  const activePlayers = liveRooms.reduce((sum, room) => sum + connectedCount(room), 0);
+  const statuses = liveRooms.reduce((all, room) => {
+    all[room.status] = (all[room.status] || 0) + 1;
+    return all;
+  }, {});
+  const topWords = Object.entries(stats.words)
+    .map(([word, value]) => ({ word, chosen: value.chosen || 0, guessed: value.guessed || 0 }))
+    .sort((a, b) => b.chosen - a.chosen || b.guessed - a.guessed)
+    .slice(0, 20);
+  return {
+    createdAt: stats.createdAt,
+    updatedAt: stats.updatedAt,
+    totals: stats.totals,
+    max: stats.max,
+    live: {
+      rooms: liveRooms.length,
+      publicRooms: liveRooms.filter(room => room.isPublic).length,
+      privateRooms: liveRooms.filter(room => !room.isPublic).length,
+      activePlayers,
+      connectedPlayers: activePlayers,
+      statuses
+    },
+    derived: {
+      averagePlayersPerRoom: stats.totals.roomsCreated ? Number((stats.totals.playerJoins / stats.totals.roomsCreated).toFixed(2)) : 0,
+      correctGuessRate: stats.totals.guesses ? Number(((stats.totals.correctGuesses / stats.totals.guesses) * 100).toFixed(1)) : 0,
+      closeGuessRate: stats.totals.guesses ? Number(((stats.totals.closeGuesses / stats.totals.guesses) * 100).toFixed(1)) : 0,
+      roundsPerGame: stats.totals.gamesStarted ? Number((stats.totals.roundsStarted / stats.totals.gamesStarted).toFixed(2)) : 0,
+      drawEventsPerRound: stats.totals.roundsStarted ? Number((stats.totals.drawEvents / stats.totals.roundsStarted).toFixed(2)) : 0
+    },
+    topWords
+  };
+}
+
 function staticFile(req, res) {
   const requestedPath = decodeURIComponent(new URL(req.url, `http://${req.headers.host}`).pathname);
   const filePath = requestedPath === "/"
     ? path.join(PUBLIC_DIR, "index.html")
+    : requestedPath === "/stats"
+      ? path.join(PUBLIC_DIR, "stats.html")
     : path.resolve(PUBLIC_DIR, `.${requestedPath}`);
   const publicRoot = `${path.resolve(PUBLIC_DIR)}${path.sep}`;
   if (filePath !== path.join(PUBLIC_DIR, "index.html") && !filePath.startsWith(publicRoot)) {
@@ -543,6 +730,10 @@ const server = http.createServer(async (req, res) => {
         }
       });
       return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/stats") {
+      return sendJson(res, 200, statsSnapshot());
     }
 
     if (!url.pathname.startsWith("/api/")) return staticFile(req, res);
@@ -619,14 +810,18 @@ const server = http.createServer(async (req, res) => {
       }
       if (room.status !== "playing" || player.id === room.drawerId || player.guessed) {
         addChat(room, { kind: "message", playerId: player.id, name: player.name, text });
+        bump("totals.chatMessages");
         broadcast(room);
         return sendJson(res, 200, { ok: true });
       }
+      bump("totals.guesses");
       if (normalizeText(text) === normalizeText(room.word)) {
         const remaining = Math.max(0, room.endsAt - Date.now());
         const base = Math.round(30 + (remaining / (room.settings.drawTime * 1000)) * 70);
         player.score += base;
         player.guessed = true;
+        bump("totals.correctGuesses");
+        trackWord(room.word, "guessed");
         const drawer = getPlayer(room, room.drawerId);
         if (drawer) drawer.score += 20;
         room.lastWinner ||= player.name;
@@ -636,7 +831,12 @@ const server = http.createServer(async (req, res) => {
         else broadcast(room);
         return sendJson(res, 200, { correct: true });
       }
+      if (isCloseGuess(text, room.word)) {
+        bump("totals.closeGuesses");
+        addChat(room, { kind: "hint", toPlayerId: player.id, text: "قريب جداً... جرّب تعديل بسيط." });
+      }
       addChat(room, { kind: "message", playerId: player.id, name: player.name, text });
+      bump("totals.chatMessages");
       broadcast(room);
       return sendJson(res, 200, { ok: true });
     }
@@ -667,6 +867,10 @@ const server = http.createServer(async (req, res) => {
       if (safeEvent.type === "clear") room.drawEvents = [safeEvent];
       else if (safeEvent.type === "undo") room.drawEvents.push(safeEvent);
       else if (safeEvent.points.length) room.drawEvents.push(safeEvent);
+      bump("totals.drawEvents");
+      if (safeEvent.type === "clear") bump("totals.clears");
+      else if (safeEvent.type === "undo") bump("totals.undos");
+      else bump("totals.strokes");
       if (room.drawEvents.length > 700) room.drawEvents.splice(0, room.drawEvents.length - 700);
       broadcast(room);
       return sendJson(res, 200, { ok: true });

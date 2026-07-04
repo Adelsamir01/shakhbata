@@ -340,6 +340,46 @@ button {
   box-shadow: 0 8px 18px rgba(23, 32, 51, 0.14);
 }
 
+.home-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.home-stats span {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px 6px;
+  text-align: center;
+}
+
+.home-stats strong {
+  display: block;
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.home-stats small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.stats-link {
+  display: block;
+  margin-top: 8px;
+  color: var(--brand-dark);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+  text-decoration: none;
+}
+
 .btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -607,6 +647,12 @@ button {
 
 .premium-game .letter.hinted {
   animation: none;
+}
+
+.word-space {
+  flex-basis: 14px;
+  width: 14px;
+  height: 22px;
 }
 
 .letter.hinted {
@@ -982,6 +1028,13 @@ canvas {
 .premium-game .message.system {
   background: #fff6d8;
   color: #6d4b00;
+}
+
+.message.hint,
+.premium-game .message.hint {
+  background: #e7f0ff;
+  color: #1d4ed8;
+  font-weight: 800;
 }
 
 .message.correct {
