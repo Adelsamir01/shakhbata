@@ -328,7 +328,6 @@ function renderHome() {
         <span><strong>...</strong><small>لاعب</small></span>
         <span><strong>...</strong><small>تخمين صحيح</small></span>
       </div>
-      <a class="stats-link" href="/stats">كل الإحصائيات</a>
       <div class="error" data-error></div>
     </section>
   `;

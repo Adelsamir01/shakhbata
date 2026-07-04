@@ -377,16 +377,6 @@ button {
   white-space: nowrap;
 }
 
-.stats-link {
-  display: block;
-  margin-top: 8px;
-  color: var(--brand-dark);
-  font-size: 13px;
-  font-weight: 800;
-  text-align: center;
-  text-decoration: none;
-}
-
 .btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
