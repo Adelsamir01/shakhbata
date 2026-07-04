@@ -313,8 +313,8 @@ function addChat(room, entry) {
   if (room.chat.length > 120) room.chat.splice(0, room.chat.length - 120);
 }
 
-function addPlayer(room, name) {
-  const player = { id: crypto.randomUUID(), name, score: 0, guessed: false, muted: false, connected: true };
+function addPlayer(room, name, deviceId = "") {
+  const player = { id: crypto.randomUUID(), name, score: 0, guessed: false, muted: false, connected: true, deviceId };
   room.players.push(player);
   addChat(room, { kind: "system", text: `${name} دخل الغرفة.` });
   bump("totals.playerJoins");
@@ -323,7 +323,15 @@ function addPlayer(room, name) {
   return player;
 }
 
-function reconnectPlayer(room, name, playerId) {
+function reconnectPlayer(room, name, playerId, deviceId) {
+  if (deviceId) {
+    const byDevice = room.players.find(player => player.deviceId === deviceId);
+    if (byDevice) {
+      byDevice.name = name;
+      byDevice.connected = true;
+      return byDevice;
+    }
+  }
   const byId = playerId ? getPlayer(room, playerId) : null;
   if (byId) {
     byId.name = name;
@@ -615,7 +623,7 @@ function endIfTooFew(room) {
 }
 
 function createRoom(hostName, settings = {}, options = {}) {
-  const player = { id: crypto.randomUUID(), name: hostName, score: 0, guessed: false, muted: false, connected: true };
+  const player = { id: crypto.randomUUID(), name: hostName, score: 0, guessed: false, muted: false, connected: true, deviceId: options.deviceId || "" };
   const room = {
     code: roomCode(),
     isPublic: Boolean(options.isPublic),
@@ -828,7 +836,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const name = cleanName(body.name);
       if (!name) return sendJson(res, 400, { error: "اكتب اسم مناسب." });
-      const { room, player } = createRoom(name, body.settings);
+      const { room, player } = createRoom(name, body.settings, {}, body.deviceId);
       return sendJson(res, 200, { room: publicRoom(room, player.id), playerId: player.id });
     }
 
@@ -841,7 +849,8 @@ const server = http.createServer(async (req, res) => {
       if (!name) return sendJson(res, 400, { error: "اكتب اسم مناسب." });
       if (!room) return sendJson(res, 404, { error: "الغرفة غير موجودة." });
 
-      const existing = reconnectPlayer(room, name, existingPlayerId);
+      const deviceId = String(body.deviceId || "").trim();
+      const existing = reconnectPlayer(room, name, existingPlayerId, deviceId);
       if (existing) {
         removeDuplicateNames(room, existing);
         addChat(room, { kind: "system", text: `${name} رجع للغرفة.` });
@@ -851,7 +860,7 @@ const server = http.createServer(async (req, res) => {
 
       if (connectedCount(room) >= room.settings.maxPlayers) return sendJson(res, 409, { error: "الغرفة ممتلئة." });
       if (room.status !== "lobby") return sendJson(res, 409, { error: "اللعبة بدأت بالفعل." });
-      const player = addPlayer(room, name);
+      const player = addPlayer(room, name, deviceId);
       broadcast(room);
       return sendJson(res, 200, { room: publicRoom(room, player.id), playerId: player.id });
     }
@@ -864,20 +873,21 @@ const server = http.createServer(async (req, res) => {
 
       let room = findPublicRoom();
       let player;
+      const deviceId = String(body.deviceId || "").trim();
       if (room) {
-        const existing = reconnectPlayer(room, name, existingPlayerId);
+        const existing = reconnectPlayer(room, name, existingPlayerId, deviceId);
         if (existing) {
           removeDuplicateNames(room, existing);
           addChat(room, { kind: "system", text: `${name} رجع للماتش.` });
           player = existing;
         } else {
-          player = addPlayer(room, name);
+          player = addPlayer(room, name, deviceId);
         }
         if (room.status === "lobby") {
           schedulePublicStart(room);
         }
       } else {
-        const created = createRoom(name, { rounds: 5, drawTime: 60, maxPlayers: 8 }, { isPublic: true });
+        const created = createRoom(name, { rounds: 5, drawTime: 60, maxPlayers: 8 }, { isPublic: true, deviceId });
         room = created.room;
         player = created.player;
         schedulePublicStart(room);

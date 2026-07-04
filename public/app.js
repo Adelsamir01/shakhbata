@@ -9,6 +9,11 @@ document.addEventListener("keydown", event => {
 const urlRoomCode = (new URLSearchParams(location.search).get("room") || new URLSearchParams(location.search).get("code") || "").trim().toUpperCase();
 const storedRoomCode = (localStorage.getItem("shakhbata:roomCode") || "").trim().toUpperCase();
 const storedPlayerId = localStorage.getItem("shakbata:playerId") || "";
+let deviceId = localStorage.getItem("shakhbata:deviceId") || "";
+if (!deviceId) {
+  deviceId = crypto.randomUUID();
+  localStorage.setItem("shakhbata:deviceId", deviceId);
+}
 
 const state = {
   name: localStorage.getItem("shakbata:name") || "",
@@ -397,7 +402,7 @@ function bindHome() {
   document.querySelector("[data-create]")?.addEventListener("click", async () => {
     sync();
     try {
-      const data = await api("/api/create", { name: state.name });
+      const data = await api("/api/create", { name: state.name, deviceId });
       persistPlayer(data);
       clearRoomLink();
     } catch (error) {
@@ -407,7 +412,7 @@ function bindHome() {
   document.querySelector("[data-join]")?.addEventListener("click", async () => {
     sync();
     try {
-      const data = await api("/api/join", { name: state.name, code: state.code, playerId: state.playerId });
+      const data = await api("/api/join", { name: state.name, code: state.code, playerId: state.playerId, deviceId });
       persistPlayer(data);
       clearRoomLink();
     } catch (error) {
@@ -417,7 +422,7 @@ function bindHome() {
   document.querySelector("[data-quick]")?.addEventListener("click", async () => {
     sync();
     try {
-      const data = await api("/api/quick-play", { name: state.name, playerId: state.playerId });
+      const data = await api("/api/quick-play", { name: state.name, playerId: state.playerId, deviceId });
       persistPlayer(data);
       clearRoomLink();
     } catch (error) {
