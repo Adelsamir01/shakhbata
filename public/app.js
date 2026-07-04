@@ -70,8 +70,12 @@ function escapeHtml(value = "") {
 }
 
 function compactName(name = "", max = 9) {
-  const text = String(name);
+  const text = firstName(name);
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+function firstName(name = "") {
+  return String(name).trim().split(/\s+/)[0] || name;
 }
 
 function roomLink(code) {
@@ -174,12 +178,12 @@ function connectWS(room, playerId) {
     }
   };
 
-  ws.onerror = () => setError("الاتصال بيحاول يرجع تاني...");
+  ws.onerror = () => setError("محاولة إعادة الاتصال...");
 
   ws.onclose = () => {
     clearInterval(heartbeatTimer);
     state.ws = null;
-    setError("الاتصال بيحاول يرجع تاني...");
+    setError("محاولة إعادة الاتصال...");
     if (state.room) {
       setTimeout(() => connectWS(state.room, state.playerId), state.wsReconnectDelay);
       state.wsReconnectDelay = Math.min(state.wsReconnectDelay * 1.5, 5000);
@@ -279,7 +283,7 @@ function patchLiveUI(room) {
   if (statusLine) {
     const isDrawer = room.drawerId === state.playerId;
     const isChoosing = room.status === "choosing";
-    statusLine.textContent = isChoosing ? (isDrawer ? "اختار كلمة للرسم" : `${room.drawerName} بيختار كلمة`) : (isDrawer ? "دورك ترسم الكلمة" : `الرسام: ${room.drawerName}`);
+    statusLine.textContent = isChoosing ? (isDrawer ? "اختاروا كلمة للرسم" : `اختيار الكلمة: ${room.drawerName}`) : (isDrawer ? "دورك في الرسم" : `الرسام: ${room.drawerName}`);
   }
   const pointsPill = document.querySelector(".game-header .pill");
   if (pointsPill) pointsPill.textContent = `نقاطك: ${me?.score || 0}`;
@@ -372,12 +376,12 @@ function renderHome() {
       ${showRejoin ? html`
         <div class="rejoin-banner">
           <p class="small">عندك لعبة مفتوحة من قبل</p>
-          <button class="btn" data-rejoin style="width:100%;margin-top:6px">ارجع للعبة</button>
+          <button class="btn" data-rejoin style="width:100%;margin-top:6px">ارجعوا للعبة</button>
           <button class="btn ghost" data-forget-rejoin style="width:100%;margin-top:6px">لعبة جديدة</button>
         </div>
       ` : ""}
-      <h1 class="title">${invitedCode ? "ادخل الغرفة" : "ارسمها، وخليهم يخمنوا."}</h1>
-      <p class="subtitle">${invitedCode ? `اكتب اسمك وانضم مباشرة لغرفة ${escapeHtml(invitedCode)}.` : "ادخل باسمك، اعمل غرفة بكود، وابدأ جولات رسم وتخمين عربية مع أصحابك."}</p>
+      <h1 class="title">${invitedCode ? "ادخلوا الغرفة" : "ارسمها، وخليهم يخمنوا."}</h1>
+      <p class="subtitle">${invitedCode ? `اكتبوا اسمكم وانضموا مباشرة لغرفة ${escapeHtml(invitedCode)}.` : "ادخلوا باسمكم، اعملوا غرفة بكود، وابدأوا جولات رسم وتخمين عربية مع أصحابك."}</p>
       <label class="field">
         <span>اسمك</span>
         <input class="input" data-name maxlength="18" autocomplete="name" placeholder="مثلاً: حودة" value="${escapeHtml(state.name)}" />
@@ -515,7 +519,7 @@ function renderLobby() {
       <div class="players" style="margin-top:10px">
         ${players.map(player => html`
           <div class="player">
-            <strong>${escapeHtml(player.name)} ${player.id === room.hostId ? "★" : ""}</strong>
+            <strong>${escapeHtml(firstName(player.name))} ${player.id === room.hostId ? "★" : ""}</strong>
             <span>${player.score}</span>
           </div>
         `).join("")}
@@ -531,7 +535,7 @@ function lobbyStatusText(room, isHost, players) {
     if (players.length < 2) return "في انتظار لاعب عشوائي";
     return room.autoStartAt ? "الماتش بيبدأ حالاً" : "جاهزين";
   }
-  return isHost ? "أنت صاحب الغرفة" : "في انتظار البداية";
+  return isHost ? "أنت مسؤول الغرفة" : "في انتظار البداية";
 }
 
 function publicLobbyPanel(room, players) {
@@ -540,7 +544,7 @@ function publicLobbyPanel(room, players) {
     <section class="panel matchmaking-panel">
       <strong>${waiting ? "بندور على ناس تلعب معاهم" : "لقينا لاعبين"}</strong>
       <div class="matchmaking-pulse" aria-hidden="true"><span></span><span></span><span></span></div>
-      <p class="small">${waiting ? "سيب الشاشة مفتوحة. أول ما يدخل لاعب تاني الماتش هيبدأ تلقائياً." : "استعد. اختيار الكلمات هيبدأ بعد ثواني."}</p>
+      <p class="small">${waiting ? "سيب الشاشة مفتوحة. أول ما ينضم لاعب تاني الماتش هيبدأ تلقائياً." : "استعدوا. اختيار الكلمات هيبدأ بعد ثواني."}</p>
       <div class="error" data-error></div>
     </section>
   `;
@@ -602,8 +606,8 @@ function renderGame() {
   const statusText = isIntermission
     ? "جولة جديدة هتبدأ حالاً"
     : isChoosing
-      ? (isDrawer ? "اختار كلمة للرسم" : `${escapeHtml(room.drawerName)} بيختار كلمة`)
-      : (isDrawer ? "دورك ترسم الكلمة" : `الرسام: ${escapeHtml(room.drawerName)}`);
+      ? (isDrawer ? "اختاروا كلمة للرسم" : `اختيار الكلمة: ${escapeHtml(room.drawerName)}`)
+      : (isDrawer ? "دورك في الرسم" : `الرسام: ${escapeHtml(room.drawerName)}`);
   app.className = "app game-screen premium-game";
   app.innerHTML = html`
     <section class="stage ${isDrawer ? "" : "guesser-mode"} ${canDraw && state.sizeOpen ? "size-open" : ""}">
@@ -632,7 +636,7 @@ function renderGame() {
         </div>
         <span class="small">${isIntermission ? "استعداد" : (isChoosing ? "اختيار" : (room.status === "reveal" ? "الكلمة" : `${room.wordLength} حروف`))}</span>
       </div>
-      ${canDraw ? drawToolsHtml() : `<div class="tools panel round-note">${isIntermission ? "خليك هنا. اللعبة الجديدة بتبدأ تلقائياً." : (isChoosing ? (isDrawer ? "اختار بسرعة. لو الوقت خلص هنختار أول كلمة." : "استعدوا للتخمين...") : (isPlaying ? "اكتب تخمينك في الدردشة" : "استراحة قصيرة قبل الجولة التالية"))}</div>`}
+      ${canDraw ? drawToolsHtml() : `<div class="tools panel round-note">${isIntermission ? "خليكوا هنا. اللعبة الجديدة بتبدأ تلقائياً." : (isChoosing ? (isDrawer ? "اختاروا بسرعة. لو الوقت خلص هنختار أول كلمة." : "استعدوا للتخمين...") : (isPlaying ? "اكتبوا تخمينكم في الدردشة" : "استراحة قصيرة قبل الجولة التالية"))}</div>`}
       <div class="canvas-wrap">
         ${isChoosing ? chooseBoardHtml(room, isDrawer) : `<canvas id="board"></canvas>`}
       </div>
@@ -653,7 +657,7 @@ function renderGame() {
 
 function wordDisplay(room, isDrawer, isChoosing, word) {
   if (room.status === "intermission") return "جولة جديدة خلال ثواني";
-  if (isChoosing) return isDrawer ? "اختار كلمة للرسم" : "في انتظار اختيار الكلمة";
+  if (isChoosing) return isDrawer ? "اختاروا كلمة للرسم" : "في انتظار اختيار الكلمة";
   if (isDrawer || room.revealedWord) return escapeHtml(room.revealedWord);
   const hints = new Map((room.hintLetters || []).map(hint => [hint.index, hint.letter]));
   return Array.from(word).map((_, index) => {
@@ -688,15 +692,15 @@ function chooseBoardHtml(room, isDrawer) {
   if (!isDrawer) {
     return html`
       <div class="choice-board waiting-board">
-        <strong>${escapeHtml(room.drawerName)} بيختار كلمة</strong>
-        <span>أول ما يختار، الجولة تبدأ والوقت يتحسب.</span>
+        <strong>اختيار الكلمة: ${escapeHtml(room.drawerName)}</strong>
+        <span>أول ما يتم الاختيار، الجولة تبدأ والوقت يتحسب.</span>
       </div>
     `;
   }
 
   return html`
     <div class="choice-board">
-      <strong>اختار واحدة ترسمها</strong>
+      <strong>اختاروا واحدة ترسموها</strong>
       <div class="word-options">
         ${room.wordOptions.map(word => `<button class="word-option" data-word-choice="${escapeHtml(word)}">${escapeHtml(word)}</button>`).join("")}
       </div>
@@ -706,15 +710,15 @@ function chooseBoardHtml(room, isDrawer) {
 
 function guessPlaceholder(isDrawer, status) {
   if (status === "intermission") return "الجولة الجديدة بتبدأ...";
-  if (isDrawer) return status === "choosing" ? "اختار كلمة الأول" : "أنت الرسام في الجولة دي";
-  return status === "choosing" ? "استنى اختيار الكلمة" : "اكتب تخمينك";
+  if (isDrawer) return status === "choosing" ? "اختاروا كلمة الأول" : "دورك ترسم في الجولة دي";
+  return status === "choosing" ? "استنوا اختيار الكلمة" : "اكتبوا تخمينكم";
 }
 
 function messageHtml(message) {
   if (message.kind === "system") return `<div class="message system" data-id="${message.id}">${escapeHtml(message.text)}</div>`;
   if (message.kind === "hint") return `<div class="message hint" data-id="${message.id}">${escapeHtml(message.text)}</div>`;
   if (message.kind === "correct") return `<div class="message correct" data-id="${message.id}">${escapeHtml(message.text)}</div>`;
-  return `<div class="message" data-id="${message.id}"><strong>${escapeHtml(message.name)}:</strong> ${escapeHtml(message.text)}</div>`;
+  return `<div class="message" data-id="${message.id}"><strong>${escapeHtml(firstName(message.name))}:</strong> ${escapeHtml(message.text)}</div>`;
 }
 
 function bindGame() {
@@ -786,14 +790,14 @@ function renderEnded() {
     <section class="panel">
       <h1 class="title">النتيجة النهائية</h1>
       <div class="ended-list">
-        ${ranking.map(player => `<div class="rank"><strong>${escapeHtml(player.name)}</strong><span>${player.score} نقطة</span></div>`).join("")}
+        ${ranking.map(player => `<div class="rank"><strong>${escapeHtml(firstName(player.name))}</strong><span>${player.score} نقطة</span></div>`).join("")}
       </div>
       <button class="btn" data-share style="width:100%;margin-top:12px">مشاركة النتيجة</button>
     </section>
   `;
   document.querySelector("[data-leave]").addEventListener("click", leaveRoom);
   document.querySelector("[data-share]").addEventListener("click", async () => {
-    const text = `نتيجة شخبطة:\n${ranking.map((p, i) => `${i + 1}. ${p.name}: ${p.score}`).join("\n")}`;
+    const text = `نتيجة شخبطة:\n${ranking.map((p, i) => `${i + 1}. ${firstName(p.name)}: ${p.score}`).join("\n")}`;
     if (navigator.share) await navigator.share({ text });
     else await navigator.clipboard.writeText(text);
   });

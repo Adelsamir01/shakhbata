@@ -233,6 +233,10 @@ function cleanName(name) {
   return cleaned;
 }
 
+function firstName(name = "") {
+  return String(name).trim().split(/\s+/)[0] || name;
+}
+
 function publicRoom(room, viewerId = "") {
   const currentWord = room.word || "";
   const canSeeWord = room.status === "reveal" || room.status === "ended" || viewerId === room.drawerId;
@@ -261,7 +265,7 @@ function publicRoom(room, viewerId = "") {
       .filter(player => player.connected)
       .map(player => ({
         id: player.id,
-        name: player.name,
+        name: firstName(player.name),
         score: player.score,
         guessed: player.guessed,
         muted: player.muted,
@@ -307,7 +311,7 @@ function addChat(room, entry) {
 function addPlayer(room, name, deviceId = "") {
   const player = { id: crypto.randomUUID(), name, score: 0, guessed: false, muted: false, connected: true, deviceId };
   room.players.push(player);
-  addChat(room, { kind: "system", text: `${name} دخل الغرفة.` });
+  addChat(room, { kind: "system", text: `انضمام ${firstName(name)} للغرفة.` });
   bump("totals.playerJoins");
   bump(room.isPublic ? "totals.publicPlayerJoins" : "totals.privatePlayerJoins");
   updateMaxStats(room);
@@ -420,7 +424,7 @@ function advanceDrawer(room) {
   const nextId = nextDrawer(room);
   if (!nextId) {
     room.drawerId = null;
-    if (room.status === "playing") revealRound(room, "الرسام خرج!");
+    if (room.status === "playing") revealRound(room, "الرسام غادر!");
     return;
   }
   room.drawerId = nextId;
@@ -431,7 +435,7 @@ function advanceDrawer(room) {
     room.endsAt = Date.now() + 12000;
     clearTimeout(room.roundTimer);
     room.roundTimer = setTimeout(() => chooseWord(room, room.wordOptions[0]), 12000);
-    addChat(room, { kind: "system", text: `${getPlayer(room, nextId)?.name || "لاعب"} بيختار كلمة.` });
+    addChat(room, { kind: "system", text: `اختيار الكلمة: ${firstName(getPlayer(room, nextId)?.name) || "لاعب"}.` });
   }
   broadcast(room);
 }
@@ -479,7 +483,7 @@ function startRound(room) {
   room.drawerId = nextDrawer(room);
   if (!room.drawerId) {
     room.status = "ended";
-    addChat(room, { kind: "system", text: "مفيش لاعبين متصلين. الل-game اتوقف." });
+    addChat(room, { kind: "system", text: "مفيش لاعبين متصلين. اللعبة اتوقفت." });
     broadcast(room);
     return;
   }
@@ -487,7 +491,7 @@ function startRound(room) {
   room.drawEvents = [];
   room.lastWinner = null;
   for (const player of room.players) player.guessed = false;
-  addChat(room, { kind: "system", text: `الجولة ${room.round}. ${room.players.find(player => player.id === room.drawerId)?.name} بيختار كلمة.` });
+  addChat(room, { kind: "system", text: `الجولة ${room.round} - اختيار الكلمة: ${firstName(room.players.find(player => player.id === room.drawerId)?.name)}.` });
   clearTimeout(room.roundTimer);
   room.roundTimer = setTimeout(() => chooseWord(room, room.wordOptions[0]), 12000);
   broadcast(room);
@@ -551,7 +555,7 @@ function chooseWord(room, word) {
   clearTimeout(room.roundTimer);
   room.roundTimer = setTimeout(() => revealRound(room, "انتهى الوقت!"), room.settings.drawTime * 1000);
   scheduleHintTimers(room);
-  addChat(room, { kind: "system", text: `بدأ الرسم! الرسام: ${room.players.find(player => player.id === room.drawerId)?.name}` });
+  addChat(room, { kind: "system", text: `بدأ الرسم! (${firstName(room.players.find(player => player.id === room.drawerId)?.name)})` });
   broadcast(room);
 }
 
@@ -654,7 +658,7 @@ function createRoom(hostName, settings = {}, options = {}) {
     autoStartAt: null,
     cleanupTimer: null
   };
-  addChat(room, { kind: "system", text: options.isPublic ? `${hostName} دخل اللعب العشوائي.` : `${hostName} أنشأ الغرفة.` });
+  addChat(room, { kind: "system", text: options.isPublic ? `انضمام ${firstName(hostName)} للعب العشوائي.` : `تم إنشاء الغرفة بواسطة ${firstName(hostName)}.` });
   rooms.set(room.code, room);
   bump("totals.roomsCreated");
   bump(room.isPublic ? "totals.publicRoomsCreated" : "totals.privateRoomsCreated");
@@ -712,7 +716,7 @@ function handleDisconnect(room, playerId) {
   const stillConnected = [...room.clients].some(client => client.playerId === playerId);
   if (stillConnected) return;
   player.connected = false;
-  addChat(room, { kind: "system", text: `${player.name} خرج.` });
+  addChat(room, { kind: "system", text: `مغادرة ${firstName(player.name)}.` });
 
   if (room.drawerId === player.id) {
     if (room.status === "choosing") advanceDrawer(room);
@@ -808,7 +812,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/create") {
       const body = await readBody(req);
       const name = cleanName(body.name);
-      if (!name) return sendJson(res, 400, { error: "اكتب اسم مناسب." });
+      if (!name) return sendJson(res, 400, { error: "اسم مناسب مطلوب." });
       const { room, player } = createRoom(name, body.settings, { deviceId: body.deviceId });
       return sendJson(res, 200, { room: publicRoom(room, player.id), playerId: player.id });
     }
@@ -819,7 +823,7 @@ const server = http.createServer(async (req, res) => {
       const code = String(body.code || "").trim().toUpperCase().slice(0, 8);
       const room = getRoom(code);
       const existingPlayerId = String(body.playerId || "").trim();
-      if (!name) return sendJson(res, 400, { error: "اكتب اسم مناسب." });
+      if (!name) return sendJson(res, 400, { error: "اسم مناسب مطلوب." });
       if (!room) return sendJson(res, 404, { error: "الغرفة غير موجودة." });
 
       const deviceId = String(body.deviceId || "").trim();
@@ -827,7 +831,7 @@ const server = http.createServer(async (req, res) => {
       if (existing) {
         removeDuplicateNames(room, existing);
         removeDuplicateDevices(room, existing);
-        addChat(room, { kind: "system", text: `${name} رجع للغرفة.` });
+        addChat(room, { kind: "system", text: `عودة ${firstName(name)} للغرفة.` });
         broadcast(room);
         return sendJson(res, 200, { room: publicRoom(room, existing.id), playerId: existing.id });
       }
@@ -843,7 +847,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const name = cleanName(body.name);
       const existingPlayerId = String(body.playerId || "").trim();
-      if (!name) return sendJson(res, 400, { error: "اكتب اسم مناسب." });
+      if (!name) return sendJson(res, 400, { error: "اسم مناسب مطلوب." });
 
       let room = findPublicRoom();
       let player;
@@ -853,7 +857,7 @@ const server = http.createServer(async (req, res) => {
         if (existing) {
           removeDuplicateNames(room, existing);
           removeDuplicateDevices(room, existing);
-          addChat(room, { kind: "system", text: `${name} رجع للماتش.` });
+          addChat(room, { kind: "system", text: `عودة ${firstName(name)} للماتش.` });
           player = existing;
         } else {
           player = addPlayer(room, name, deviceId);
@@ -986,7 +990,7 @@ wss.on("connection", (ws, req) => {
         return;
       }
       if (room.status !== "playing" || player.id === room.drawerId || player.guessed) {
-        addChat(room, { kind: "message", playerId: player.id, name: player.name, text });
+        addChat(room, { kind: "message", playerId: player.id, name: firstName(player.name), text });
         bump("totals.chatMessages");
         broadcast(room);
         return;
@@ -1002,7 +1006,7 @@ wss.on("connection", (ws, req) => {
         const drawer = getPlayer(room, room.drawerId);
         if (drawer) drawer.score += 20;
         room.lastWinner ||= player.name;
-        addChat(room, { kind: "correct", playerId: player.id, name: player.name, text: `${player.name} خمّن الكلمة! +${base}` });
+        addChat(room, { kind: "correct", playerId: player.id, name: firstName(player.name), text: `إجابة صحيحة من ${firstName(player.name)}! +${base}` });
         const activeGuessers = room.players.filter(p => p.id !== room.drawerId && p.connected);
         if (activeGuessers.every(p => p.guessed)) revealRound(room, "كل اللاعبين خمنوا!");
         else broadcast(room);
@@ -1010,9 +1014,9 @@ wss.on("connection", (ws, req) => {
       }
       if (isCloseGuess(text, room.word)) {
         bump("totals.closeGuesses");
-        addChat(room, { kind: "hint", toPlayerId: player.id, text: "قريب جداً... جرّب تعديل بسيط." });
+        addChat(room, { kind: "hint", toPlayerId: player.id, text: "قريب جداً... جرّبوا تعديل بسيط." });
       }
-      addChat(room, { kind: "message", playerId: player.id, name: player.name, text });
+      addChat(room, { kind: "message", playerId: player.id, name: firstName(player.name), text });
       bump("totals.chatMessages");
       broadcast(room);
       return;
