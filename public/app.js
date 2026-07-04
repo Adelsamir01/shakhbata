@@ -533,7 +533,7 @@ function renderGame() {
       : (isDrawer ? "دورك ترسم الكلمة" : `الرسام: ${escapeHtml(room.drawerName)}`);
   app.className = "app game-screen premium-game";
   app.innerHTML = html`
-    <section class="stage">
+    <section class="stage ${isDrawer ? "" : "guesser-mode"}">
       <header class="game-header">
         <div class="brand-bar">
           <div>
