@@ -6,10 +6,14 @@ document.addEventListener("keydown", event => {
     render();
   }
 });
+const urlRoomCode = (new URLSearchParams(location.search).get("room") || new URLSearchParams(location.search).get("code") || "").trim().toUpperCase();
+const storedRoomCode = (localStorage.getItem("shakhbata:roomCode") || "").trim().toUpperCase();
+const storedPlayerId = localStorage.getItem("shakbata:playerId") || "";
+
 const state = {
   name: localStorage.getItem("shakbata:name") || "",
-  code: (new URLSearchParams(location.search).get("room") || new URLSearchParams(location.search).get("code") || localStorage.getItem("shakbata:roomCode") || "").trim().toUpperCase(),
-  playerId: localStorage.getItem("shakbata:playerId") || "",
+  code: urlRoomCode || storedRoomCode,
+  playerId: urlRoomCode && urlRoomCode !== storedRoomCode ? "" : storedPlayerId,
   room: null,
   source: null,
   reconnecting: false,
@@ -288,7 +292,9 @@ function render() {
 }
 
 function renderHome() {
-  const invitedCode = state.reconnecting ? "" : state.code.trim().toUpperCase();
+  const currentUrlCode = (new URLSearchParams(location.search).get("room") || new URLSearchParams(location.search).get("code") || "").trim().toUpperCase();
+  const invitedCode = state.reconnecting ? "" : currentUrlCode;
+  const showRejoin = !state.reconnecting && state.code && state.playerId && !currentUrlCode;
   app.className = "app home-hero";
   app.innerHTML = html`
     <section class="panel">
@@ -306,7 +312,7 @@ function renderHome() {
           <path class="draw-fill cat-fill" d="M168 98 C143 96 130 80 136 61 L127 43 L149 51 C160 43 180 43 191 51 L213 43 L204 61 C210 81 194 98 168 98 Z" />
         </svg>
       </div>
-      ${!state.reconnecting && state.code && state.playerId ? html`
+      ${showRejoin ? html`
         <div class="rejoin-banner">
           <p class="small">عندك لعبة مفتوحة من قبل</p>
           <button class="btn" data-rejoin style="width:100%;margin-top:6px">ارجع للعبة</button>
