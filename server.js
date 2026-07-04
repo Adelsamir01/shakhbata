@@ -903,7 +903,6 @@ function closeWithError(ws, message) {
 
 wss.on("connection", (ws, req) => {
   const urlPath = new URL(req.url, `http://${req.headers.host}`).pathname;
-  console.log("WS connection attempt:", urlPath, "headers:", JSON.stringify(req.headers));
   if (urlPath !== "/ws") {
     ws.close(1002, "Invalid path");
     return;
