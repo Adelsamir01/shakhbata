@@ -794,7 +794,7 @@ const server = http.createServer(async (req, res) => {
           schedulePublicStart(room);
         }
       } else {
-        const created = createRoom(name, { rounds: 10, drawTime: 60, maxPlayers: 8 }, { isPublic: true });
+        const created = createRoom(name, { rounds: 5, drawTime: 60, maxPlayers: 8 }, { isPublic: true });
         room = created.room;
         player = created.player;
         schedulePublicStart(room);
