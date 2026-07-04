@@ -13,7 +13,7 @@ const storedPlayerId = localStorage.getItem("shakbata:playerId") || "";
 const state = {
   name: localStorage.getItem("shakbata:name") || "",
   code: urlRoomCode || storedRoomCode,
-  playerId: urlRoomCode && urlRoomCode !== storedRoomCode ? "" : storedPlayerId,
+  playerId: storedPlayerId,
   room: null,
   source: null,
   reconnecting: false,
