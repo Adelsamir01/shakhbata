@@ -37,7 +37,8 @@ const state = {
   code: urlRoomCode || storedRoomCode,
   playerId: storedPlayerId,
   room: null,
-  source: null,
+  ws: null,
+  wsReconnectDelay: 1000,
   reconnecting: false,
   tool: "pen",
   color: "#111827",
@@ -109,59 +110,88 @@ function handleServerMessage(data) {
   if (data.type === "state") {
     const didRender = applyRoomState(data.room);
     syncDrawEvents(data.room.drawEvents, didRender);
+    const maxSeq = (data.room.drawEvents || []).reduce((max, event) => Math.max(max, event.seq || 0), 0);
+    state.room.lastDrawSeq = maxSeq;
   } else if (data.type === "draw") {
     if (state.room) {
+      if (data.seq && data.seq !== (state.room.lastDrawSeq || 0) + 1) {
+        // Gap detected; request a full resync
+        sendWS("sync");
+      }
+      state.room.lastDrawSeq = data.seq || 0;
       state.room.drawEvents.push(data.event);
       if (state.room.drawEvents.length > 700) state.room.drawEvents.splice(0, state.room.drawEvents.length - 700);
       syncDrawEvents(state.room.drawEvents, false);
     }
+  } else if (data.type === "error") {
+    setError(data.message || "حصل خطأ.");
   }
 }
 
-function connect(room, playerId) {
-  if (state.source) state.source.close();
-  state.source = new EventSource(`/events?room=${room.code}&player=${playerId}`);
-  state.source.onmessage = event => handleServerMessage(JSON.parse(event.data));
-  state.source.onerror = () => setError("الاتصال بيحاول يرجع تاني...");
+function wsUrl(roomCode, playerId) {
+  const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${location.host}/ws?room=${encodeURIComponent(roomCode)}&player=${encodeURIComponent(playerId)}`;
+}
+
+function sendWS(type, payload = {}) {
+  if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return false;
+  try {
+    state.ws.send(JSON.stringify({ type, ...payload }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function connectWS(room, playerId) {
+  if (state.ws) {
+    state.ws.onclose = null;
+    state.ws.close();
+  }
+  const ws = new WebSocket(wsUrl(room.code, playerId));
+  state.ws = ws;
+
+  let heartbeatTimer = null;
+  const startHeartbeat = () => {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) sendWS("ping");
+    }, 25000);
+  };
+
+  ws.onopen = () => {
+    state.wsReconnectDelay = 1000;
+    state.reconnecting = false;
+    sendWS("auth", { room: room.code, player: playerId });
+    startHeartbeat();
+  };
+
+  ws.onmessage = event => {
+    try {
+      handleServerMessage(JSON.parse(event.data));
+    } catch {
+      // ignore malformed messages
+    }
+  };
+
+  ws.onerror = () => setError("الاتصال بيحاول يرجع تاني...");
+
+  ws.onclose = () => {
+    clearInterval(heartbeatTimer);
+    state.ws = null;
+    setError("الاتصال بيحاول يرجع تاني...");
+    if (state.room) {
+      setTimeout(() => connectWS(state.room, state.playerId), state.wsReconnectDelay);
+      state.wsReconnectDelay = Math.min(state.wsReconnectDelay * 1.5, 5000);
+    }
+  };
 }
 
 function tryReconnect() {
   if (!state.code || !state.playerId) return renderHome();
   state.reconnecting = true;
   renderHome();
-  const source = new EventSource(`/events?room=${state.code}&player=${state.playerId}`);
-  let gotMessage = false;
-  let failTimer = null;
-
-  source.onmessage = event => {
-    const data = JSON.parse(event.data);
-    if (!gotMessage) {
-      gotMessage = true;
-      clearTimeout(failTimer);
-      state.reconnecting = false;
-      state.source = source;
-      source.onerror = () => setError("الاتصال بيحاول يرجع تاني...");
-    }
-    handleServerMessage(data);
-  };
-
-  source.onerror = () => {
-    if (gotMessage) {
-      setError("الاتصال بيحاول يرجع تاني...");
-      return;
-    }
-    clearTimeout(failTimer);
-    failTimer = setTimeout(() => {
-      if (!gotMessage && source.readyState !== EventSource.OPEN) {
-        source.close();
-        state.reconnecting = false;
-        localStorage.removeItem("shakbata:roomCode");
-        state.code = "";
-        state.room = null;
-        renderHome();
-      }
-    }, 3500);
-  };
+  connectWS({ code: state.code }, state.playerId);
 }
 
 function isLocalDrawerDrawing() {
@@ -284,10 +314,11 @@ function persistPlayer(data) {
   state.pendingRenderKey = "";
   state.playerId = data.playerId || state.playerId;
   state.code = data.room.code;
+  state.wsReconnectDelay = 1000;
   localStorage.setItem("shakbata:name", state.name);
   localStorage.setItem("shakbata:playerId", state.playerId);
   localStorage.setItem("shakbata:roomCode", data.room.code);
-  connect(data.room, state.playerId);
+  connectWS(data.room, state.playerId);
 }
 
 function replayableStrokes(events = []) {
@@ -407,7 +438,7 @@ function bindHome() {
     renderHome();
   });
   document.querySelector("[data-rejoin]")?.addEventListener("click", () => {
-    connect({ code: state.code }, state.playerId);
+    connectWS({ code: state.code }, state.playerId);
   });
   document.querySelector("[data-forget-rejoin]")?.addEventListener("click", () => {
     localStorage.removeItem("shakbata:playerId");
@@ -534,20 +565,14 @@ function bindLobby() {
       await navigator.clipboard.writeText(link);
     }
   });
-  document.querySelector("[data-start]")?.addEventListener("click", async () => {
-    try {
-      await api("/api/start", { code: state.room.code, playerId: state.playerId });
-    } catch (error) {
-      setError(error.message);
-    }
+  document.querySelector("[data-start]")?.addEventListener("click", () => {
+    sendWS("start");
   });
   for (const selector of ["[data-rounds]", "[data-time]", "[data-max]"]) {
     const element = document.querySelector(selector);
     if (!element || element.disabled) continue;
-    element.addEventListener("change", async () => {
-      await api("/api/room-settings", {
-        code: state.room.code,
-        playerId: state.playerId,
+    element.addEventListener("change", () => {
+      sendWS("room-settings", {
         rounds: document.querySelector("[data-rounds]").value,
         drawTime: document.querySelector("[data-time]").value,
         maxPlayers: document.querySelector("[data-max]").value
@@ -689,13 +714,13 @@ function messageHtml(message) {
 function bindGame() {
   const chat = document.querySelector("[data-chat]");
   if (chat) chat.scrollTop = chat.scrollHeight;
-  document.querySelector("[data-guess-form]").addEventListener("submit", async event => {
+  document.querySelector("[data-guess-form]").addEventListener("submit", event => {
     event.preventDefault();
     const input = document.querySelector("[data-guess]");
     const text = input.value.trim();
     if (!text) return;
     input.value = "";
-    await api("/api/guess", { code: state.room.code, playerId: state.playerId, text });
+    sendWS("guess", { text });
   });
   document.querySelectorAll("[data-tool]").forEach(button => {
     button.addEventListener("click", () => {
@@ -710,8 +735,8 @@ function bindGame() {
     });
   });
   document.querySelectorAll("[data-word-choice]").forEach(button => {
-    button.addEventListener("click", async () => {
-      await api("/api/choose-word", { code: state.room.code, playerId: state.playerId, word: button.dataset.wordChoice });
+    button.addEventListener("click", () => {
+      sendWS("choose-word", { word: button.dataset.wordChoice });
     });
   });
   document.querySelector("[data-toggle-color]")?.addEventListener("click", () => {
@@ -769,7 +794,11 @@ function renderEnded() {
 }
 
 function leaveRoom() {
-  if (state.source) state.source.close();
+  if (state.ws) {
+    state.ws.onclose = null;
+    state.ws.close();
+    state.ws = null;
+  }
   state.room = null;
   state.code = "";
   state.renderKey = "";
@@ -855,8 +884,8 @@ function flushStroke(force) {
   state.lastSentAt = Date.now();
 }
 
-async function sendDraw(event) {
-  await api("/api/draw", { code: state.room.code, playerId: state.playerId, event });
+function sendDraw(event) {
+  sendWS("draw", { event });
 }
 
 function redrawCanvas() {

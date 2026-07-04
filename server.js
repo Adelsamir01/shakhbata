@@ -2,6 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { WebSocketServer } = require("ws");
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "127.0.0.1";
@@ -273,39 +274,29 @@ function publicRoom(room, viewerId = "") {
 }
 
 function broadcast(room) {
-  const dead = [];
   for (const client of room.clients) {
-    if (client.destroyed || client.writableEnded) {
-      dead.push(client);
-      continue;
-    }
-    const payload = `data: ${JSON.stringify({ type: "state", room: publicRoom(room, client.playerId) })}\n\n`;
+    if (client.readyState !== 1) continue;
     try {
-      const ok = client.write(payload);
-      if (!ok) client.once("error", () => room.clients.delete(client));
+      const payload = JSON.stringify({ type: "state", room: publicRoom(room, client.playerId || "") });
+      client.send(payload);
     } catch {
-      dead.push(client);
+      // ignore send errors; cleanup happens on close
     }
   }
-  for (const client of dead) room.clients.delete(client);
 }
 
 function broadcastDraw(room, event) {
-  const dead = [];
-  const payload = `data: ${JSON.stringify({ type: "draw", event })}\n\n`;
+  room.drawSeq += 1;
+  event.seq = room.drawSeq;
+  const payload = JSON.stringify({ type: "draw", seq: room.drawSeq, event });
   for (const client of room.clients) {
-    if (client.destroyed || client.writableEnded) {
-      dead.push(client);
-      continue;
-    }
+    if (client.readyState !== 1) continue;
     try {
-      const ok = client.write(payload);
-      if (!ok) client.once("error", () => room.clients.delete(client));
+      client.send(payload);
     } catch {
-      dead.push(client);
+      // ignore send errors
     }
   }
-  for (const client of dead) room.clients.delete(client);
 }
 
 function addChat(room, entry) {
@@ -652,6 +643,7 @@ function createRoom(hostName, settings = {}, options = {}) {
     endsAt: null,
     chat: [],
     drawEvents: [],
+    drawSeq: 0,
     lastWinner: null,
     roundTimer: null,
     revealTimer: null,
@@ -709,6 +701,30 @@ function getPlayer(room, playerId) {
 
 function connectedCount(room) {
   return room.players.filter(player => player.connected).length;
+}
+
+function handleDisconnect(room, playerId) {
+  const player = getPlayer(room, playerId);
+  if (!player) return;
+  const stillConnected = [...room.clients].some(client => client.playerId === playerId);
+  if (stillConnected) return;
+  player.connected = false;
+  addChat(room, { kind: "system", text: `${player.name} خرج.` });
+
+  if (room.drawerId === player.id) {
+    if (room.status === "choosing") advanceDrawer(room);
+    else if (room.status === "playing") revealRound(room, "الرسام خرج!");
+  }
+
+  if (room.status === "lobby" && connectedCount(room) < 2 && room.autoStartTimer) {
+    clearTimeout(room.autoStartTimer);
+    room.autoStartTimer = null;
+    room.autoStartAt = null;
+  }
+
+  endIfTooFew(room);
+  if (connectedCount(room) === 0) scheduleRoomCleanup(room);
+  broadcast(room);
 }
 
 function statsSnapshot() {
@@ -779,57 +795,6 @@ function staticFile(req, res) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
-
-    if (req.method === "GET" && url.pathname === "/events") {
-      const room = getRoom(url.searchParams.get("room"));
-      const playerId = url.searchParams.get("player");
-      if (!room || !getPlayer(room, playerId)) {
-        res.writeHead(404);
-        res.end();
-        return;
-      }
-      res.writeHead(200, {
-        "content-type": "text/event-stream; charset=utf-8",
-        "cache-control": "no-cache, no-store, must-revalidate",
-        "x-accel-buffering": "no",
-        connection: "keep-alive"
-      });
-      res.playerId = playerId;
-      room.clients.add(res);
-      const cleanup = () => room.clients.delete(res);
-      res.on("error", cleanup);
-      res.on("close", cleanup);
-      const player = getPlayer(room, playerId);
-      if (player) {
-        player.connected = true;
-        broadcast(room);
-      }
-      res.write(`data: ${JSON.stringify({ type: "state", room: publicRoom(room, playerId) })}\n\n`);
-      req.on("close", () => {
-        room.clients.delete(res);
-        const stillConnected = [...room.clients].some(client => client.playerId === playerId);
-        if (!stillConnected && player) {
-          player.connected = false;
-          addChat(room, { kind: "system", text: `${player.name} خرج.` });
-
-          if (room.drawerId === player.id) {
-            if (room.status === "choosing") advanceDrawer(room);
-            else if (room.status === "playing") revealRound(room, "الرسام خرج!");
-          }
-
-          if (room.status === "lobby" && connectedCount(room) < 2 && room.autoStartTimer) {
-            clearTimeout(room.autoStartTimer);
-            room.autoStartTimer = null;
-            room.autoStartAt = null;
-          }
-
-          endIfTooFew(room);
-          if (connectedCount(room) === 0) scheduleRoomCleanup(room);
-          broadcast(room);
-        }
-      });
-      return;
-    }
 
     if (req.method === "GET" && url.pathname === "/api/stats") {
       return sendJson(res, 200, statsSnapshot());
@@ -904,79 +869,85 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { room: publicRoom(room, player.id), playerId: player.id });
     }
 
-    if (req.method === "POST" && url.pathname === "/api/start") {
-      const body = await readBody(req);
-      const room = getRoom(body.code);
-      if (!room || room.hostId !== body.playerId) return sendJson(res, 403, { error: "لا يمكنك بدء هذه الغرفة." });
-      if (connectedCount(room) < 2) return sendJson(res, 400, { error: "تحتاج لاعبين متصلين على الأقل." });
-      room.round = 0;
-      room.drawerIndex = 0;
-      for (const player of room.players) player.score = 0;
-      startRound(room);
-      return sendJson(res, 200, { room: publicRoom(room, body.playerId) });
+    if (["/api/start", "/api/guess", "/api/choose-word", "/api/draw", "/api/room-settings"].includes(url.pathname)) {
+      return sendJson(res, 410, { error: "هذا الإجراء يتم الآن عبر WebSocket." });
     }
 
-    if (req.method === "POST" && url.pathname === "/api/guess") {
-      const body = await readBody(req);
-      const room = getRoom(body.code);
-      if (!room) return sendJson(res, 404, { error: "الغرفة غير موجودة." });
-      const player = getPlayer(room, body.playerId);
-      if (!player || player.muted) return sendJson(res, 403, { error: "لا يمكنك الإرسال." });
-      const text = String(body.text || "").trim().slice(0, 80);
-      if (!text) return sendJson(res, 400, { error: "اكتب تخمين." });
-      if (blockedWords.some(word => normalizeText(text).includes(normalizeText(word)))) {
-        addChat(room, { kind: "system", text: "تم حجب رسالة غير مناسبة." });
-        broadcast(room);
-        return sendJson(res, 200, { ok: true });
+    sendJson(res, 404, { error: "Not found" });
+  } catch (error) {
+    console.error("Request error:", error);
+    if (!res.headersSent) sendJson(res, 500, { error: "حدث خطأ في السيرفر." });
+  }
+});
+
+server.on("error", error => {
+  console.error(`Could not start server on ${HOST}:${PORT} (${error.code || error.message}).`);
+  process.exit(1);
+});
+
+const wss = new WebSocketServer({ server, path: "/ws" });
+
+function safeSend(ws, data) {
+  if (ws.readyState !== 1) return;
+  try {
+    ws.send(JSON.stringify(data));
+  } catch (error) {
+    console.error("WS send error:", error.message);
+  }
+}
+
+function closeWithError(ws, message) {
+  safeSend(ws, { type: "error", message });
+  ws.close(1008, message);
+}
+
+wss.on("connection", (ws, req) => {
+  ws.isAlive = true;
+  ws.playerId = "";
+  ws.roomCode = "";
+
+  ws.on("pong", () => { ws.isAlive = true; });
+
+  ws.on("message", raw => {
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return closeWithError(ws, "Invalid message.");
+    }
+
+    const type = data.type;
+
+    if (type === "auth") {
+      const room = getRoom(data.room);
+      const playerId = String(data.player || "").trim();
+      const player = room && getPlayer(room, playerId);
+      if (!room || !player) {
+        return closeWithError(ws, "الغرفة أو اللاعب غير موجود.");
       }
-      if (room.status !== "playing" || player.id === room.drawerId || player.guessed) {
-        addChat(room, { kind: "message", playerId: player.id, name: player.name, text });
-        bump("totals.chatMessages");
-        broadcast(room);
-        return sendJson(res, 200, { ok: true });
-      }
-      bump("totals.guesses");
-      if (normalizeText(text) === normalizeText(room.word)) {
-        const remaining = Math.max(0, room.endsAt - Date.now());
-        const base = Math.round(30 + (remaining / (room.settings.drawTime * 1000)) * 70);
-        player.score += base;
-        player.guessed = true;
-        bump("totals.correctGuesses");
-        trackWord(room.word, "guessed");
-        const drawer = getPlayer(room, room.drawerId);
-        if (drawer) drawer.score += 20;
-        room.lastWinner ||= player.name;
-        addChat(room, { kind: "correct", playerId: player.id, name: player.name, text: `${player.name} خمّن الكلمة! +${base}` });
-        const activeGuessers = room.players.filter(p => p.id !== room.drawerId && p.connected);
-        if (activeGuessers.every(p => p.guessed)) revealRound(room, "كل اللاعبين خمنوا!");
-        else broadcast(room);
-        return sendJson(res, 200, { correct: true });
-      }
-      if (isCloseGuess(text, room.word)) {
-        bump("totals.closeGuesses");
-        addChat(room, { kind: "hint", toPlayerId: player.id, text: "قريب جداً... جرّب تعديل بسيط." });
-      }
-      addChat(room, { kind: "message", playerId: player.id, name: player.name, text });
-      bump("totals.chatMessages");
+      ws.roomCode = room.code;
+      ws.playerId = playerId;
+      room.clients.add(ws);
+      player.connected = true;
+      safeSend(ws, { type: "state", room: publicRoom(room, playerId) });
       broadcast(room);
-      return sendJson(res, 200, { ok: true });
+      return;
     }
 
-    if (req.method === "POST" && url.pathname === "/api/choose-word") {
-      const body = await readBody(req);
-      const room = getRoom(body.code);
-      if (!room || room.status !== "choosing" || room.drawerId !== body.playerId) {
-        return sendJson(res, 403, { error: "اختيار الكلمة للرسام فقط." });
-      }
-      chooseWord(room, String(body.word || ""));
-      return sendJson(res, 200, { room: publicRoom(room, body.playerId) });
+    const room = getRoom(ws.roomCode);
+    const player = room && getPlayer(room, ws.playerId);
+    if (!room || !player) {
+      return closeWithError(ws, "غير مصرح.");
     }
 
-    if (req.method === "POST" && url.pathname === "/api/draw") {
-      const body = await readBody(req);
-      const room = getRoom(body.code);
-      if (!room || room.status !== "playing" || room.drawerId !== body.playerId) return sendJson(res, 403, { error: "الرسم للرسام فقط." });
-      const event = body.event || {};
+    if (type === "ping") {
+      safeSend(ws, { type: "pong" });
+      return;
+    }
+
+    if (type === "draw") {
+      if (room.status !== "playing" || room.drawerId !== player.id) return;
+      const event = data.event || {};
       const safeEvent = {
         type: ["stroke", "clear", "undo"].includes(event.type) ? event.type : "stroke",
         points: Array.isArray(event.points) ? event.points.slice(0, 80) : [],
@@ -994,31 +965,108 @@ const server = http.createServer(async (req, res) => {
       else bump("totals.strokes");
       if (room.drawEvents.length > 700) room.drawEvents.splice(0, room.drawEvents.length - 700);
       broadcastDraw(room, safeEvent);
-      return sendJson(res, 200, { ok: true });
+      return;
     }
 
-    if (req.method === "POST" && url.pathname === "/api/room-settings") {
-      const body = await readBody(req);
-      const room = getRoom(body.code);
-      if (!room || room.hostId !== body.playerId || room.status !== "lobby") return sendJson(res, 403, { error: "الإعدادات لصاحب الغرفة فقط." });
-      room.settings.rounds = Math.max(2, Math.min(10, Number(body.rounds) || room.settings.rounds));
-      room.settings.drawTime = Math.max(35, Math.min(120, Number(body.drawTime) || room.settings.drawTime));
-      room.settings.maxPlayers = Math.max(2, Math.min(12, Number(body.maxPlayers) || room.settings.maxPlayers));
+    if (type === "guess") {
+      const text = String(data.text || "").trim().slice(0, 80);
+      if (!text) return;
+      if (player.muted) return;
+      if (blockedWords.some(word => normalizeText(text).includes(normalizeText(word)))) {
+        addChat(room, { kind: "system", text: "تم حجب رسالة غير مناسبة." });
+        broadcast(room);
+        return;
+      }
+      if (room.status !== "playing" || player.id === room.drawerId || player.guessed) {
+        addChat(room, { kind: "message", playerId: player.id, name: player.name, text });
+        bump("totals.chatMessages");
+        broadcast(room);
+        return;
+      }
+      bump("totals.guesses");
+      if (normalizeText(text) === normalizeText(room.word)) {
+        const remaining = Math.max(0, room.endsAt - Date.now());
+        const base = Math.round(30 + (remaining / (room.settings.drawTime * 1000)) * 70);
+        player.score += base;
+        player.guessed = true;
+        bump("totals.correctGuesses");
+        trackWord(room.word, "guessed");
+        const drawer = getPlayer(room, room.drawerId);
+        if (drawer) drawer.score += 20;
+        room.lastWinner ||= player.name;
+        addChat(room, { kind: "correct", playerId: player.id, name: player.name, text: `${player.name} خمّن الكلمة! +${base}` });
+        const activeGuessers = room.players.filter(p => p.id !== room.drawerId && p.connected);
+        if (activeGuessers.every(p => p.guessed)) revealRound(room, "كل اللاعبين خمنوا!");
+        else broadcast(room);
+        return;
+      }
+      if (isCloseGuess(text, room.word)) {
+        bump("totals.closeGuesses");
+        addChat(room, { kind: "hint", toPlayerId: player.id, text: "قريب جداً... جرّب تعديل بسيط." });
+      }
+      addChat(room, { kind: "message", playerId: player.id, name: player.name, text });
+      bump("totals.chatMessages");
       broadcast(room);
-      return sendJson(res, 200, { room: publicRoom(room, body.playerId) });
+      return;
     }
 
-    sendJson(res, 404, { error: "Not found" });
-  } catch (error) {
-    console.error("Request error:", error);
-    if (!res.headersSent) sendJson(res, 500, { error: "حدث خطأ في السيرفر." });
-  }
+    if (type === "choose-word") {
+      if (room.status !== "choosing" || room.drawerId !== player.id) return;
+      chooseWord(room, String(data.word || ""));
+      return;
+    }
+
+    if (type === "start") {
+      if (room.hostId !== player.id) return;
+      if (connectedCount(room) < 2) return;
+      room.round = 0;
+      room.drawerIndex = 0;
+      for (const p of room.players) p.score = 0;
+      startRound(room);
+      return;
+    }
+
+    if (type === "room-settings") {
+      if (room.hostId !== player.id || room.status !== "lobby") return;
+      room.settings.rounds = Math.max(2, Math.min(10, Number(data.rounds) || room.settings.rounds));
+      room.settings.drawTime = Math.max(35, Math.min(120, Number(data.drawTime) || room.settings.drawTime));
+      room.settings.maxPlayers = Math.max(2, Math.min(12, Number(data.maxPlayers) || room.settings.maxPlayers));
+      broadcast(room);
+      return;
+    }
+
+    if (type === "sync") {
+      safeSend(ws, { type: "state", room: publicRoom(room, player.id) });
+      return;
+    }
+  });
+
+  ws.on("close", () => {
+    const room = getRoom(ws.roomCode);
+    if (room) {
+      room.clients.delete(ws);
+      handleDisconnect(room, ws.playerId);
+    }
+  });
+
+  ws.on("error", error => {
+    console.error("WS error:", error.message);
+    ws.terminate();
+  });
 });
 
-server.on("error", error => {
-  console.error(`Could not start server on ${HOST}:${PORT} (${error.code || error.message}).`);
-  process.exit(1);
-});
+const heartbeat = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (!ws.isAlive) {
+      ws.terminate();
+      continue;
+    }
+    ws.isAlive = false;
+    ws.ping();
+  }
+}, 30000);
+
+wss.on("close", () => clearInterval(heartbeat));
 
 server.listen(PORT, HOST, () => {
   console.log(`Arabic Scribble running on http://${HOST}:${PORT}`);
