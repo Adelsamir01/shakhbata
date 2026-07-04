@@ -885,7 +885,7 @@ server.on("error", error => {
   process.exit(1);
 });
 
-const wss = new WebSocketServer({ server, path: "/ws" });
+const wss = new WebSocketServer({ server });
 
 function safeSend(ws, data) {
   if (ws.readyState !== 1) return;
@@ -902,6 +902,12 @@ function closeWithError(ws, message) {
 }
 
 wss.on("connection", (ws, req) => {
+  const urlPath = new URL(req.url, `http://${req.headers.host}`).pathname;
+  console.log("WS connection attempt:", urlPath, "headers:", JSON.stringify(req.headers));
+  if (urlPath !== "/ws") {
+    ws.close(1002, "Invalid path");
+    return;
+  }
   ws.isAlive = true;
   ws.playerId = "";
   ws.roomCode = "";
