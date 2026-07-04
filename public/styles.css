@@ -710,9 +710,6 @@ button {
   animation: none;
 }
 
-.premium-game .canvas-lock {
-  animation: none;
-}
 
 .canvas-wrap {
   order: 4;
@@ -736,18 +733,6 @@ canvas {
   height: 100%;
   display: block;
   touch-action: none;
-}
-
-.canvas-lock {
-  position: absolute;
-  inset: auto 10px 10px 10px;
-  border-radius: 8px;
-  padding: 8px 10px;
-  background: rgba(23, 32, 51, 0.86);
-  color: white;
-  font-size: 13px;
-  text-align: center;
-  animation: toast-up 240ms var(--ease-pop) both;
 }
 
 .choice-board {
@@ -1400,17 +1385,6 @@ canvas {
   to {
     opacity: 1;
     transform: scale(1);
-  }
-}
-
-@keyframes toast-up {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 

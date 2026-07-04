@@ -558,7 +558,7 @@ function renderGame() {
       </div>
       ${canDraw ? drawToolsHtml() : `<div class="tools panel round-note">${isIntermission ? "خليك هنا. اللعبة الجديدة بتبدأ تلقائياً." : (isChoosing ? (isDrawer ? "اختار بسرعة. لو الوقت خلص هنختار أول كلمة." : "استعدوا للتخمين...") : (isPlaying ? "اكتب تخمينك في الدردشة" : "استراحة قصيرة قبل الجولة التالية"))}</div>`}
       <div class="canvas-wrap">
-        ${isChoosing ? chooseBoardHtml(room, isDrawer) : `<canvas id="board"></canvas>${isDrawer && isPlaying ? "" : `<div class="canvas-lock">${isIntermission ? "اللعبة الجديدة بتبدأ دلوقتي..." : (room.status === "reveal" ? "استراحة قصيرة قبل الجولة التالية" : "أنت بتخمن من الدردشة")}</div>`}`}
+        ${isChoosing ? chooseBoardHtml(room, isDrawer) : `<canvas id="board"></canvas>`}
       </div>
       <section class="panel chat-panel">
         <div class="chat" data-chat>
