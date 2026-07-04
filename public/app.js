@@ -1,5 +1,5 @@
 const app = document.querySelector("#app");
-const COLORS = ["#111827", "#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7", "#ec4899", "#78350f", "#6b7280"];
+const COLORS = ["#111827", "#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e", "#14b8a6", "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#ec4899", "#f43f5e", "#78350f", "#b45309", "#52525b", "#6b7280"];
 document.addEventListener("keydown", event => {
   if (event.key === "Escape" && state.colorOpen) {
     state.colorOpen = false;
@@ -15,6 +15,7 @@ const state = {
   tool: "pen",
   color: "#111827",
   colorOpen: false,
+  sizeOpen: true,
   size: 7,
   strokes: [],
   isDrawing: false,
@@ -589,7 +590,7 @@ function wordDisplay(room, isDrawer, isChoosing, word) {
 
 function drawToolsHtml() {
   return html`
-    <div class="tools panel">
+    <div class="tools panel ${state.sizeOpen ? "size-open" : ""}">
       <button class="icon-btn ${state.tool === "pen" ? "active" : ""}" data-tool="pen" title="قلم">✎</button>
       <button class="icon-btn ${state.tool === "eraser" ? "active" : ""}" data-tool="eraser" title="ممحاة">⌫</button>
       <div class="color-picker-wrap">
@@ -601,7 +602,7 @@ function drawToolsHtml() {
           `).join("")}
         </div>
       </div>
-      <input class="size" data-size type="range" min="2" max="26" value="${state.size}" title="حجم القلم" />
+      ${state.sizeOpen ? `<input class="size" data-size type="range" min="2" max="26" value="${state.size}" title="حجم القلم" />` : ""}
       <button class="icon-btn" data-undo title="تراجع">↶</button>
       <button class="icon-btn" data-clear title="مسح">×</button>
     </div>
@@ -654,7 +655,13 @@ function bindGame() {
   });
   document.querySelectorAll("[data-tool]").forEach(button => {
     button.addEventListener("click", () => {
-      state.tool = button.dataset.tool;
+      const tool = button.dataset.tool;
+      if (tool === "pen") {
+        state.sizeOpen = state.tool === "pen" ? !state.sizeOpen : true;
+      } else {
+        state.sizeOpen = false;
+      }
+      state.tool = tool;
       render();
     });
   });
@@ -676,6 +683,7 @@ function bindGame() {
       state.color = button.dataset.color;
       state.colorOpen = false;
       state.tool = "pen";
+      state.sizeOpen = true;
       render();
     });
   });

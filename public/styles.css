@@ -822,11 +822,15 @@ canvas {
   order: 5;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  grid-template-rows: 40px 30px;
+  grid-template-rows: 40px;
   gap: 6px;
   align-items: center;
   min-height: 0;
   padding: 6px;
+}
+
+.tools.size-open {
+  grid-template-rows: 40px 30px;
 }
 
 .tools > .icon-btn,
@@ -1567,8 +1571,12 @@ canvas {
   }
 
   .tools {
-    grid-template-rows: 38px 28px;
+    grid-template-rows: 38px;
     padding: 5px;
+  }
+
+  .tools.size-open {
+    grid-template-rows: 38px 28px;
   }
 
   .chat-panel {
@@ -1607,8 +1615,12 @@ canvas {
   }
 
   .tools {
-    grid-template-rows: 36px 26px;
+    grid-template-rows: 36px;
     gap: 5px;
+  }
+
+  .tools.size-open {
+    grid-template-rows: 36px 26px;
   }
 
   .guess-form {
