@@ -288,6 +288,24 @@ function broadcast(room) {
   for (const client of dead) room.clients.delete(client);
 }
 
+function broadcastDraw(room, event) {
+  const dead = [];
+  const payload = `data: ${JSON.stringify({ type: "draw", event })}\n\n`;
+  for (const client of room.clients) {
+    if (client.destroyed || client.writableEnded) {
+      dead.push(client);
+      continue;
+    }
+    try {
+      const ok = client.write(payload);
+      if (!ok) client.once("error", () => room.clients.delete(client));
+    } catch {
+      dead.push(client);
+    }
+  }
+  for (const client of dead) room.clients.delete(client);
+}
+
 function addChat(room, entry) {
   room.chat.push({ id: crypto.randomUUID(), at: Date.now(), ...entry });
   if (room.chat.length > 120) room.chat.splice(0, room.chat.length - 120);
@@ -698,7 +716,8 @@ const server = http.createServer(async (req, res) => {
       }
       res.writeHead(200, {
         "content-type": "text/event-stream; charset=utf-8",
-        "cache-control": "no-cache",
+        "cache-control": "no-cache, no-store, must-revalidate",
+        "x-accel-buffering": "no",
         connection: "keep-alive"
       });
       res.playerId = playerId;
@@ -877,7 +896,7 @@ const server = http.createServer(async (req, res) => {
       else if (safeEvent.type === "undo") bump("totals.undos");
       else bump("totals.strokes");
       if (room.drawEvents.length > 700) room.drawEvents.splice(0, room.drawEvents.length - 700);
-      broadcast(room);
+      broadcastDraw(room, safeEvent);
       return sendJson(res, 200, { ok: true });
     }
 

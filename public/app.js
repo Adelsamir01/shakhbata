@@ -79,16 +79,23 @@ function setError(message) {
   if (element) element.textContent = message || "";
 }
 
+function handleServerMessage(data) {
+  if (data.type === "state") {
+    const didRender = applyRoomState(data.room);
+    syncDrawEvents(data.room.drawEvents, didRender);
+  } else if (data.type === "draw") {
+    if (state.room) {
+      state.room.drawEvents.push(data.event);
+      if (state.room.drawEvents.length > 700) state.room.drawEvents.splice(0, state.room.drawEvents.length - 700);
+      syncDrawEvents(state.room.drawEvents, false);
+    }
+  }
+}
+
 function connect(room, playerId) {
   if (state.source) state.source.close();
   state.source = new EventSource(`/events?room=${room.code}&player=${playerId}`);
-  state.source.onmessage = event => {
-    const data = JSON.parse(event.data);
-    if (data.type === "state") {
-      const didRender = applyRoomState(data.room);
-      syncDrawEvents(data.room.drawEvents, didRender);
-    }
-  };
+  state.source.onmessage = event => handleServerMessage(JSON.parse(event.data));
   state.source.onerror = () => setError("الاتصال بيحاول يرجع تاني...");
 }
 
@@ -101,22 +108,19 @@ function tryReconnect() {
   let failTimer = null;
 
   source.onmessage = event => {
-    if (gotMessage) return;
-    gotMessage = true;
-    clearTimeout(failTimer);
     const data = JSON.parse(event.data);
-    if (data.type === "state") {
+    if (!gotMessage) {
+      gotMessage = true;
+      clearTimeout(failTimer);
       state.reconnecting = false;
       state.source = source;
       source.onerror = () => setError("الاتصال بيحاول يرجع تاني...");
-      applyRoomState(data.room);
-      syncDrawEvents(data.room.drawEvents, true);
     }
+    handleServerMessage(data);
   };
 
   source.onerror = () => {
     if (gotMessage) {
-      state.reconnecting = false;
       setError("الاتصال بيحاول يرجع تاني...");
       return;
     }
