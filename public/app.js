@@ -6,14 +6,31 @@ document.addEventListener("keydown", event => {
     render();
   }
 });
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
+  return match ? decodeURIComponent(match[2]) : "";
+}
+function setCookie(name, value, days) {
+  const expires = new Date(Date.now() + days * 86400000).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+}
+function generateId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, char => {
+    const value = Math.random() * 16 | 0;
+    return (char === "x" ? value : (value & 0x3 | 0x8)).toString(16);
+  });
+}
+
 const urlRoomCode = (new URLSearchParams(location.search).get("room") || new URLSearchParams(location.search).get("code") || "").trim().toUpperCase();
 const storedRoomCode = (localStorage.getItem("shakhbata:roomCode") || "").trim().toUpperCase();
 const storedPlayerId = localStorage.getItem("shakbata:playerId") || "";
-let deviceId = localStorage.getItem("shakhbata:deviceId") || "";
+let deviceId = localStorage.getItem("shakhbata:deviceId") || getCookie("shakhbata_deviceId") || "";
 if (!deviceId) {
-  deviceId = crypto.randomUUID();
-  localStorage.setItem("shakhbata:deviceId", deviceId);
+  deviceId = generateId();
 }
+localStorage.setItem("shakhbata:deviceId", deviceId);
+setCookie("shakhbata_deviceId", deviceId, 365);
 
 const state = {
   name: localStorage.getItem("shakbata:name") || "",
