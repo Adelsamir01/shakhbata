@@ -550,7 +550,10 @@ function renderGame() {
             <strong>${isIntermission ? "استراحة قصيرة" : `جولة ${room.round}/${room.totalRounds}`}</strong>
             <div class="small">${statusText}</div>
           </div>
-          <span class="pill">نقاطك: ${me?.score || 0}</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="pill">نقاطك: ${me?.score || 0}</span>
+            <button class="btn ghost" data-leave style="padding:0 10px;height:32px;min-height:32px;font-size:12px">خروج</button>
+          </div>
         </div>
         <div class="timer" data-timer>--</div>
       </header>
@@ -704,6 +707,7 @@ function bindGame() {
     if (lastStroke) sendDraw({ type: "undo", strokeId: lastStroke.strokeId });
   });
   document.querySelector("[data-clear]")?.addEventListener("click", () => sendDraw({ type: "clear" }));
+  document.querySelector("[data-leave]")?.addEventListener("click", leaveRoom);
   setupCanvas();
   tickTimer();
 }
