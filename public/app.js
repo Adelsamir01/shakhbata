@@ -12,6 +12,7 @@ const state = {
   playerId: localStorage.getItem("shakbata:playerId") || "",
   room: null,
   source: null,
+  reconnecting: false,
   tool: "pen",
   color: "#111827",
   colorOpen: false,
@@ -93,6 +94,7 @@ function connect(room, playerId) {
 
 function tryReconnect() {
   if (!state.code || !state.playerId) return renderHome();
+  state.reconnecting = true;
   renderHome();
   const source = new EventSource(`/events?room=${state.code}&player=${state.playerId}`);
   let gotMessage = false;
@@ -104,6 +106,7 @@ function tryReconnect() {
     clearTimeout(failTimer);
     const data = JSON.parse(event.data);
     if (data.type === "state") {
+      state.reconnecting = false;
       state.source = source;
       source.onerror = () => setError("الاتصال بيحاول يرجع تاني...");
       applyRoomState(data.room);
@@ -113,6 +116,7 @@ function tryReconnect() {
 
   source.onerror = () => {
     if (gotMessage) {
+      state.reconnecting = false;
       setError("الاتصال بيحاول يرجع تاني...");
       return;
     }
@@ -120,6 +124,7 @@ function tryReconnect() {
     failTimer = setTimeout(() => {
       if (!gotMessage && source.readyState !== EventSource.OPEN) {
         source.close();
+        state.reconnecting = false;
         localStorage.removeItem("shakbata:playerId");
         localStorage.removeItem("shakbata:roomCode");
         state.playerId = "";
@@ -297,7 +302,7 @@ function renderHome() {
           <path class="draw-fill cat-fill" d="M168 98 C143 96 130 80 136 61 L127 43 L149 51 C160 43 180 43 191 51 L213 43 L204 61 C210 81 194 98 168 98 Z" />
         </svg>
       </div>
-      ${state.code && state.playerId ? html`
+      ${!state.reconnecting && state.code && state.playerId ? html`
         <div class="rejoin-banner">
           <p class="small">عندك لعبة مفتوحة من قبل</p>
           <button class="btn" data-rejoin style="width:100%;margin-top:6px">ارجع للعبة</button>
