@@ -411,6 +411,10 @@ function advanceDrawer(room) {
 }
 
 function startRound(room) {
+  if (endIfTooFew(room)) {
+    broadcast(room);
+    return;
+  }
   if (room.round >= room.settings.rounds) {
     if (room.isPublic) {
       bump("totals.gamesCompleted");
@@ -499,6 +503,10 @@ function chooseWord(room, word) {
   if (room.status !== "choosing") return;
   advanceDrawer(room);
   if (room.status !== "choosing") return;
+  if (endIfTooFew(room)) {
+    broadcast(room);
+    return;
+  }
   if (!room.drawerId || !getPlayer(room, room.drawerId)?.connected) {
     room.status = "ended";
     addChat(room, { kind: "system", text: "مفيش رسام متصل. اللعبة اتوقفت." });
@@ -548,6 +556,41 @@ function resetGame(room) {
     player.guessed = false;
   }
   addChat(room, { kind: "system", text: "لعبة جديدة!" });
+}
+
+function endIfTooFew(room) {
+  if (connectedCount(room) >= 2) return false;
+  if (room.status === "lobby" || room.status === "ended") return false;
+
+  clearTimeout(room.roundTimer);
+  clearTimeout(room.revealTimer);
+  clearTimeout(room.nextGameTimer);
+  clearHintTimers(room);
+
+  if (room.isPublic) {
+    room.status = "lobby";
+    room.round = 0;
+    room.drawerIndex = 0;
+    room.drawerId = null;
+    room.word = "";
+    room.wordOptions = [];
+    room.hintIndexes = [];
+    room.drawEvents = [];
+    room.lastWinner = null;
+    room.endsAt = null;
+    for (const player of room.players) {
+      player.score = 0;
+      player.guessed = false;
+    }
+    addChat(room, { kind: "system", text: "اللاعبين قلوا. الماتش هيرجع للوبي لحد ما يجمع لاعبين." });
+    schedulePublicStart(room);
+  } else {
+    room.status = "ended";
+    room.revealTimer = null;
+    room.lastWinner = null;
+    addChat(room, { kind: "system", text: "مفيش لاعبين كفاية. اللعبة اتوقفت." });
+  }
+  return true;
 }
 
 function createRoom(hostName, settings = {}, options = {}) {
@@ -746,6 +789,7 @@ const server = http.createServer(async (req, res) => {
             room.autoStartAt = null;
           }
 
+          endIfTooFew(room);
           if (connectedCount(room) === 0) scheduleRoomCleanup(room);
           broadcast(room);
         }
